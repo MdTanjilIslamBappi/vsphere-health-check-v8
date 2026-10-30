@@ -92,6 +92,96 @@ def _vswitch_mtu_mismatch(hosts: list[HostInfo]) -> list[Finding]:
     return findings
 
 
+# vCenter's own default "Datastore usage on disk" alarm: Warning at 75% used,
+# Critical/Alert at 85% used (Broadcom KB 450627). Reused here rather than a
+# made-up threshold, since it is the number most vSphere admins already
+# recognise.
+_WARNING_USED_FRACTION = 0.75
+_CRITICAL_USED_FRACTION = 0.85
+_GIB = 1024**3
+
+
+def _distinct_datastores(hosts: list[HostInfo]) -> dict[str, tuple[str, int, int]]:
+    """Every datastore across the fleet, deduplicated by UUID (falling back
+
+    to name, matching ``datastore.py``'s own per-host dedup key), since a
+    shared VMFS volume is typically mounted -- and independently
+    reported -- by every host in the assessment; without this, the same
+    real problem would otherwise raise one finding per host that mounts it.
+    """
+    seen: dict[str, tuple[str, int, int]] = {}
+    for host in hosts:
+        for ds in host.datastores:
+            if not ds.capacity_bytes or ds.available_bytes is None:
+                continue
+            key = ds.uuid or ds.name
+            seen.setdefault(key, (ds.name, ds.capacity_bytes, ds.available_bytes))
+    return seen
+
+
+def _datastore_usage_finding(
+    name: str, capacity: int, available: int, rule_id: str, title: str,
+    severity: Severity, threshold_label: str,
+) -> Finding:
+    used_pct = (1 - available / capacity) * 100
+    return Finding(
+        rule_id=rule_id,
+        title=title,
+        severity=severity,
+        summary=(
+            f"Datastore '{name}' is {used_pct:.1f}% full "
+            f"({available / _GIB:.1f} GiB free of {capacity / _GIB:.1f} GiB total), past "
+            f"vCenter's own default {threshold_label} usage-alarm threshold."
+        ),
+        evidence=[f"vmkfstools -P -v 10: {name} -- {used_pct:.1f}% used"],
+        affected_object=name,
+        remediation=(
+            "Review what is consuming space on this datastore (snapshots, orphaned "
+            "VMDKs, swap files) and either reclaim space or migrate some VMs to "
+            "another datastore before it fills further."
+        ),
+        limitations=(
+            "A point-in-time snapshot from this bundle's capture moment, read directly "
+            "from each host's own VMFS volume data (vmkfstools -P -v 10); a shared "
+            "datastore mounted by several hosts in this assessment is reported once "
+            "here, deduplicated by UUID, not once per host. Thin-provisioned VMDKs and "
+            "snapshot growth can consume space between capture and when this report "
+            "is read."
+        ),
+    )
+
+
+def _datastore_usage_critical(hosts: list[HostInfo]) -> list[Finding]:
+    findings = []
+    for name, capacity, available in sorted(_distinct_datastores(hosts).values()):
+        if (1 - available / capacity) < _CRITICAL_USED_FRACTION:
+            continue
+        findings.append(
+            _datastore_usage_finding(
+                name, capacity, available, "fleet.datastore_usage_critical",
+                "Datastore is critically low on free space", Severity.HIGH,
+                "critical (85% used)",
+            )
+        )
+    return findings
+
+
+def _datastore_usage_warning(hosts: list[HostInfo]) -> list[Finding]:
+    findings = []
+    for name, capacity, available in sorted(_distinct_datastores(hosts).values()):
+        used_fraction = 1 - available / capacity
+        if used_fraction < _WARNING_USED_FRACTION or used_fraction >= _CRITICAL_USED_FRACTION:
+            continue
+        findings.append(
+            _datastore_usage_finding(
+                name, capacity, available, "fleet.datastore_usage_warning",
+                "Datastore is running low on free space", Severity.MEDIUM,
+                "warning (75% used)",
+            )
+        )
+    return findings
+
+
 RULES: list[FleetRule] = [
     FleetRule(
         rule_id="fleet.cpu_model_mismatch",
@@ -114,5 +204,27 @@ RULES: list[FleetRule] = [
             "vCenter cluster membership."
         ),
         evaluate=_vswitch_mtu_mismatch,
+    ),
+    FleetRule(
+        rule_id="fleet.datastore_usage_warning",
+        title="Datastore is running low on free space",
+        default_severity=Severity.MEDIUM,
+        evidence_required=("datastores[].capacity_bytes", "datastores[].available_bytes"),
+        limitations=(
+            "Point-in-time snapshot at capture only, from each host's own VMFS volume "
+            "data; deduplicated by UUID across hosts that share a datastore."
+        ),
+        evaluate=_datastore_usage_warning,
+    ),
+    FleetRule(
+        rule_id="fleet.datastore_usage_critical",
+        title="Datastore is critically low on free space",
+        default_severity=Severity.HIGH,
+        evidence_required=("datastores[].capacity_bytes", "datastores[].available_bytes"),
+        limitations=(
+            "Point-in-time snapshot at capture only, from each host's own VMFS volume "
+            "data; deduplicated by UUID across hosts that share a datastore."
+        ),
+        evaluate=_datastore_usage_critical,
     ),
 ]

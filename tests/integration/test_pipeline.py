@@ -145,6 +145,20 @@ def test_run_assessment_flags_vswitch_uplink_with_no_physical_link(tmp_path):
     assert "network.vswitch_uplink_link_down" in rule_ids
 
 
+def test_run_assessment_flags_datastore_low_on_free_space(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz", datastore_name="DS-01", datastore_used_fraction=0.80
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    host = assessment.hosts[0]
+    ds = host.datastores[0]
+    assert ds.capacity_bytes == 1000 * 1024**3
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "fleet.datastore_usage_warning" in rule_ids
+
+
 def test_run_assessment_on_multi_host_vcenter_zip(tmp_path):
     bundle_path = build_vcenter_zip(
         tmp_path / "vc.zip", hostnames=["esxi-a.example.test", "esxi-b.example.test"]

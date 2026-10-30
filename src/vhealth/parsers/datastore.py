@@ -1,11 +1,14 @@
-"""Parse VMFS datastore name/UUID and their backing device IDs.
+"""Parse VMFS datastore name/UUID, capacity, and their backing device IDs.
 
 Source: ``commands/vmkfstools_-P--v-10-vmfsvolumes<name-or-uuid>.txt``, one
 file per VMFS volume (the output of ``vmkfstools -P -v 10 /vmfs/volumes/<x>``
 captured by vm-support). This gives a human-readable datastore name for the
 bare ``naa.xxxx``/``t10.xxxx``/``eui.xxxx``/``mpx.xxxx`` device IDs that
 storage/log findings would otherwise show on their own -- see
-``HostInfo.datastore_for_naa``.
+``HostInfo.datastore_for_naa`` -- and, on the same ``Capacity ... avail``
+line, this volume's own point-in-time capacity/free-space reading. That
+reading is a direct per-host fact, not something that requires vCenter's
+inventory database -- see ``fleet_rules.py``'s datastore usage checks.
 
 Not every volume has a device-backed extent (``OSDATA``, ``BOOTBANK*``,
 ``scratch``, ``productLocker`` are typically backed by something other than
@@ -20,13 +23,14 @@ from pathlib import Path
 
 from vhealth.models.host import Datastore, HostInfo
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 _GLOB = "vmkfstools_-P--v-10-vmfsvolumes*.txt"
 
 _LABEL_PREFIX = "File system label (if any): "
 _UUID_PREFIX = "UUID: "
 _DEVICE_ID_RE = re.compile(r"\b(?:naa|t10|eui|mpx)\.[0-9a-zA-Z]+(?=:\d+\b)")
+_CAPACITY_RE = re.compile(r"^Capacity (\d+) \([^)]*\), (\d+) \(\d+ blocks\) avail")
 
 _UNLABELLED = {"", "none", "(cannot get label)"}
 
@@ -60,6 +64,8 @@ def _parse_one(path: Path, host: HostInfo, seen: set[str]) -> None:
     label: str | None = None
     uuid: str | None = None
     naa_ids: list[str] = []
+    capacity_bytes: int | None = None
+    available_bytes: int | None = None
     in_partitions = False
     for line in text.splitlines():
         if line.startswith(_LABEL_PREFIX):
@@ -68,6 +74,11 @@ def _parse_one(path: Path, host: HostInfo, seen: set[str]) -> None:
                 label = candidate
         elif line.startswith(_UUID_PREFIX):
             uuid = line[len(_UUID_PREFIX) :].strip() or None
+        elif line.startswith("Capacity "):
+            match = _CAPACITY_RE.match(line)
+            if match:
+                capacity_bytes = int(match.group(1))
+                available_bytes = int(match.group(2))
         elif line.strip().startswith("Partitions spanned"):
             in_partitions = True
         elif in_partitions:
@@ -84,4 +95,12 @@ def _parse_one(path: Path, host: HostInfo, seen: set[str]) -> None:
     if dedup_key in seen:
         return
     seen.add(dedup_key)
-    host.datastores.append(Datastore(name=label, uuid=uuid, naa_ids=naa_ids))
+    host.datastores.append(
+        Datastore(
+            name=label,
+            uuid=uuid,
+            naa_ids=naa_ids,
+            capacity_bytes=capacity_bytes,
+            available_bytes=available_bytes,
+        )
+    )

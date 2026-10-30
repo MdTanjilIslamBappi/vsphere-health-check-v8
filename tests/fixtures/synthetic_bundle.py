@@ -86,6 +86,7 @@ def build_host_dir(
     cluster_id: str = "cluster-synthetic-01",
     cluster_in_alarm: bool = False,
     datastore_name: str | None = None,
+    datastore_used_fraction: float | None = None,
     vm_names: list[str] | None = None,
     vm_no_evc_masks: bool = False,
     ntp_time_synchronized: bool | None = None,
@@ -117,6 +118,10 @@ def build_host_dir(
     VMFS datastore backed by the synthetic SAN disk
     (``naa.6000000000000000000000000000001``), so a rule's output can be
     checked for the resolved datastore name instead of the bare device ID.
+    ``datastore_used_fraction``, if also given, adds a ``Capacity .../avail``
+    line to that same dump computed against a fixed 1000 GiB capacity, so
+    the fleet datastore-usage rules can be exercised; left as ``None``, no
+    capacity/free-space line is written at all.
 
     ``ntp_time_synchronized``, if given (True or False), adds an
     ``esxcli system ntp get`` JSON dump reporting that sync state against
@@ -276,10 +281,20 @@ def build_host_dir(
     )
 
     if datastore_name is not None:
+        capacity_line = ""
+        if datastore_used_fraction is not None:
+            capacity = 1000 * 1024**3
+            available = int(capacity * (1 - datastore_used_fraction))
+            capacity_line = (
+                f"Capacity {capacity} ({capacity // 1048576} file blocks * 1048576), "
+                f"{available} ({available // 1048576} blocks) avail, max supported "
+                "file size 70368744177664\n"
+            )
         vmkfstools_dump = (
             "VMFS-6.82 (Raw Major Version: 24) file system spanning 1 partitions.\n"
             f"File system label (if any): {datastore_name}\n"
             "Mode: public ATS-only\n"
+            f"{capacity_line}"
             "UUID: 6000000-0000000-0000-000000000001\n"
             "Partitions spanned (on \"lvm\"):\n"
             "\tnaa.6000000000000000000000000000001:1\n"

@@ -58,6 +58,7 @@ _NETWORK_RULE_IDS = {
 _STORAGE_HARDWARE_RULE_IDS = (
     _DEVICE_HEALTH_RULE_IDS | _LOG_SIGNAL_RULE_IDS | _SENSOR_RULE_IDS | _MULTIPATH_RULE_IDS
 )
+_DATASTORE_USAGE_RULE_IDS = {"fleet.datastore_usage_warning", "fleet.datastore_usage_critical"}
 
 NOT_ASSESSED = "Not assessed"
 _VCENTER_BUNDLE_REQUIRED = (
@@ -68,11 +69,12 @@ _VCENTER_DB_NOT_PARSED = (
     "not assessed; the vCenter capture contains operational logs and appliance status but "
     "not a readable form of the vCenter inventory database"
 )
-# EVC baseline name, datastore capacity/free-space, and vCenter-level alarms exist only
-# as rows in vCenter's own inventory database (vpxd's PostgreSQL store) -- no diagnostic
-# bundle, from either an ESXi host or the vCenter appliance itself, ever contains a
-# readable export of that database. This is unlike VM identity or datastore *names*,
-# which each ESXi host reports about itself independently of vCenter (see below).
+# EVC baseline name and vCenter-level alarms exist only as rows in vCenter's own
+# inventory database (vpxd's PostgreSQL store) -- no diagnostic bundle, from either
+# an ESXi host or the vCenter appliance itself, ever contains a readable export of
+# that database. This is unlike VM identity, datastore *names*, or datastore
+# *capacity/free-space*, which each ESXi host reports about itself independently of
+# vCenter (see below) -- only vCenter-side storage-policy compliance status is not.
 _VCENTER_DB_FIELDS_UNAVAILABLE = (
     "is not assessed -- that exists only in vCenter's own inventory database, which no "
     "support bundle (host or vCenter) contains a readable export of"
@@ -91,7 +93,8 @@ _HOST_ONLY_SCOPE_ITEMS = (
     "Server and CPU hardware inventory, including processor compatibility across hosts",
     "Cluster/compute-resource membership, where host-reported in the bundle",
     f"Cluster EVC mode configuration -- not assessed; {_VCENTER_BUNDLE_REQUIRED}",
-    f"Datastore capacity and accessibility -- not assessed; {_VCENTER_BUNDLE_REQUIRED}",
+    "Datastore capacity and free-space usage, from each host's own VMFS volume "
+    "data (a point-in-time snapshot at capture, not vCenter's historical trending)",
     f"Virtual machine inventory and resource utilization -- not assessed; "
     f"{_VCENTER_BUNDLE_REQUIRED}",
     f"vCenter-level active alarms -- not assessed; {_VCENTER_BUNDLE_REQUIRED}",
@@ -105,9 +108,9 @@ SCOPE_ITEMS = _HOST_ONLY_SCOPE_ITEMS
 def scope_items(assessment: Assessment) -> tuple[str, ...]:
     """Dynamic Scope section items, adjusted for what the bundle contained.
 
-    Datastore *names* and running-VM identity come from each ESXi host's
-    own files and need no vCenter bundle at all; EVC baseline, datastore
-    capacity, full VM inventory, and vCenter-level alarms exist only in
+    Datastore *names and capacity/free-space* and running-VM identity come
+    from each ESXi host's own files and need no vCenter bundle at all; EVC
+    baseline, full VM inventory, and vCenter-level alarms exist only in
     vCenter's inventory database, which no bundle type exports.
     """
     vcenter = assessment.vcenter
@@ -129,13 +132,16 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         )
     if has_datastore_names:
         datastore_item = (
-            "Datastore names, identified from per-host VMFS volume dumps. Capacity and "
-            f"accessibility {_VCENTER_DB_FIELDS_UNAVAILABLE}"
+            "Datastore names and point-in-time capacity/free-space usage, identified "
+            "from per-host VMFS volume dumps (see Recommendation for any nearing "
+            f"capacity). vCenter-side storage-policy compliance status "
+            f"{_VCENTER_DB_FIELDS_UNAVAILABLE}"
         )
     else:
         datastore_item = (
-            f"Datastore names -- not assessed; no VMFS volume data found. Capacity and "
-            f"accessibility {_VCENTER_DB_FIELDS_UNAVAILABLE}"
+            "Datastore names and capacity/free-space usage -- not assessed; no VMFS "
+            f"volume data found. vCenter-side storage-policy compliance status "
+            f"{_VCENTER_DB_FIELDS_UNAVAILABLE}"
         )
     vm_item = (
         "Running VM identity, from each host's own record of what it is currently "
@@ -341,12 +347,21 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
     hosts_with_datastores = [h for h in hosts if h.datastores]
     if hosts_with_datastores:
         datastore_names = {ds.name for h in hosts_with_datastores for ds in h.datastores}
-        datastores_status = "Informational"
+        usage_findings = _by_ids(findings, _DATASTORE_USAGE_RULE_IDS)
+        datastores_status = _status_label(_worst_severity(usage_findings)) or "Informational"
         datastores_remark = (
             f"{len(datastore_names)} distinct datastore name(s) identified from "
-            f"{len(hosts_with_datastores)} of {total} host(s) (per-volume vmkfstools dumps). "
-            f"Capacity, free space, and vCenter-side compliance status "
-            f"{_VCENTER_DB_FIELDS_UNAVAILABLE}."
+            f"{len(hosts_with_datastores)} of {total} host(s) (per-volume vmkfstools "
+            "dumps), including each volume's own point-in-time capacity/free-space "
+            "reading"
+        )
+        datastores_remark += (
+            f"; {len(usage_findings)} nearing/at capacity -- see Recommendation."
+            if usage_findings
+            else "; none nearing capacity (vCenter's own 75%/85%-used thresholds)."
+        )
+        datastores_remark += (
+            f" vCenter-side storage-policy compliance status {_VCENTER_DB_FIELDS_UNAVAILABLE}."
         )
     else:
         datastores_status = NOT_ASSESSED
@@ -868,6 +883,8 @@ _CATEGORY_BY_RULE_ID = {
     "network.vswitch_uplink_link_down": "Network",
     "network.vswitch_all_uplinks_down": "Network",
     "fleet.vswitch_mtu_mismatch": "Network",
+    "fleet.datastore_usage_warning": "Storage",
+    "fleet.datastore_usage_critical": "Storage",
     "coverage.limited_diagnostic_data": "Other",
     "vcenter.core_service_stopped": "vCenter",
     "vcenter.optional_service_stopped": "vCenter",

@@ -43,6 +43,8 @@ see "Adding a rule" below.
 | `hardware.sel_temperature_critical` | Hardware / SEL | Critical temperature threshold event recorded in the IPMI event log | High | `log_signal_counts.sel_temperature_critical`, `log_events` (from `esxcli hardware ipmi sel list`) | Same 90-day quarterly scoping and Assert-only caveat as above. Only the "Upper Critical" threshold message is matched; the earlier "Upper Non-critical" warning message is intentionally not tracked. |
 | `network.vswitch_uplink_link_down` | Network | Network switch uplink is configured but has no physical link | High | `network_switches[].uplinks`, `nic_adapters[].link_up` (`esxcfg-vswitch -l` cross-referenced against `nicinfo.sh`) | Point-in-time snapshot at capture only; requires both files to be present in the bundle. Only evaluated for a switch with 2+ configured uplinks -- 0 or 1 is `network.vswitch_single_uplink`'s territory instead. |
 | `network.vswitch_all_uplinks_down` | Network | All of a network switch's uplinks have no physical link | Critical | `network_switches[].uplinks`, `nic_adapters[].link_up` (`esxcfg-vswitch -l` cross-referenced against `nicinfo.sh`) | Point-in-time snapshot at capture only. |
+| `fleet.datastore_usage_warning` (**fleet rule**) | Storage | Datastore is running low on free space | Medium | `datastores[].capacity_bytes`/`available_bytes` (from `vmkfstools -P -v 10`) on any host in the assessment | Point-in-time snapshot at capture only; deduplicated by UUID across hosts that share a datastore. Uses vCenter's own default "Datastore usage on disk" alarm's Warning threshold (75% used, Broadcom KB 450627) rather than an invented number. |
+| `fleet.datastore_usage_critical` (**fleet rule**) | Storage | Datastore is critically low on free space | High | `datastores[].capacity_bytes`/`available_bytes` (from `vmkfstools -P -v 10`) on any host in the assessment | Same as above, using vCenter's own default alarm's Critical/Alert threshold (85% used). |
 
 ## Validation status
 
@@ -170,6 +172,26 @@ configured-uplink-count check alone. `network.vswitch_all_uplinks_down`
 has not yet been observed firing (no real bundle seen so far has a
 switch with every uplink down) and is covered by a synthetic unit test
 only.
+
+`fleet.datastore_usage_warning` has fired against real data: cross-checking
+every `vmkfstools -P -v 10` dump in the real 10-host EAMSC2 bundle (a file
+this tool already read for datastore *names*, but had never extracted the
+same dump's own `Capacity .../avail` line from) finds four real, shared
+datastores above vCenter's own 75%-used default warning threshold --
+`ETA-DRM APP Server- Datastore` (82.5% used), `Sys-Admin_Datastore08-Digital
+Archive Project` (77.3%), `PI_Network_Volume` (75.8%), and `ADMS Project
+Data Store` (75.1%) -- each mounted and independently reported by all 10
+hosts, correctly deduplicated down to one finding per datastore rather than
+one per host. **This also corrects a previously-documented limitation**:
+earlier versions of this report (and `SUPPORTED_FORMATS.md`) stated that
+datastore capacity/free-space "exists only in vCenter's own inventory
+database" and is never assessable from a support bundle -- that claim was
+wrong. It is a direct, per-host fact in the same `vmkfstools` dump already
+used for datastore names; only vCenter-side storage-policy compliance
+status and historical capacity trending remain genuinely vCenter-only.
+`fleet.datastore_usage_critical` has not yet been observed firing (no real
+datastore seen so far is above the 85%-used critical threshold) and is
+covered by a synthetic unit test only.
 
 ## Adding a rule
 

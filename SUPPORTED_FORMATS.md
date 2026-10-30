@@ -61,6 +61,7 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
 | `commands/esxcfg-vswitch_-l.txt` | `vswitch.py` | Standard vSwitch/DVS name, MTU, used-port count, and uplink NIC list |
 | `commands/localcli_hardware-ipmi-sel-list--p--i--n-all.txt` | `ipmi_sel.py` | IPMI System Event Log history: uncorrectable-ECC, drive predictive-failure, PSU-failure, and critical-temperature `Assert` signals |
 | `commands/nicinfo.sh.txt` | `nic_link.py` | Physical NIC link state (Up/Down), cross-referenced against vSwitch/DVS uplink lists |
+| `commands/vmkfstools_-P--v-10-vmfsvolumes*.txt` | `datastore.py` | VMFS datastore name/UUID, backing device IDs, and point-in-time capacity/free-space (deduplicated fleet-wide by `fleet.datastore_usage_warning`/`_critical` in `fleet_rules.py`) |
 
 ## Known gaps (not yet implemented)
 
@@ -86,23 +87,28 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
   name/moref and vCLS-membership data recovered from `vpxd`'s current
   operational log. What is *not*, and cannot be, parsed from any support
   bundle (host or vCenter) is anything that lives only in vCenter's own
-  inventory database: the EVC baseline *name*, datastore capacity/free-space
-  and vCenter-side compliance status, full VM inventory (including
-  powered-off VMs) and resource-utilization history, and vCenter-level
-  active alarms. vCenter's `vc-support.sh` does not export that database
-  -- confirmed by inspecting a real bundle's `storage/db/vpostgres/`
-  directory, which contains only Postgres config files, no data. The
-  report's "Scope of Health Check" section spells out this distinction
-  per item.
-- **Running VM identity and datastore names are host-reported, not
-  vCenter-reported.** `vm_inventory.py` reads each ESXi host's own
-  `localcli vm process list` output (which VMs that host is *currently
-  running*), and `datastore.py` reads each host's own `vmkfstools -P -v
-  10` dumps (datastore name/UUID). Both work from an ESXi host bundle
-  alone, with no vCenter member required, and both have real gaps: a
-  powered-off VM, or one with no running world at capture time, will not
-  appear; a VMFS volume mounted only via its UUID symlink with no
-  friendly-name symlink captured will not have a name to resolve to. The
+  inventory database: the EVC baseline *name*, vCenter-side storage-policy
+  compliance status, full VM inventory (including powered-off VMs) and
+  resource-utilization history, and vCenter-level active alarms.
+  vCenter's `vc-support.sh` does not export that database -- confirmed by
+  inspecting a real bundle's `storage/db/vpostgres/` directory, which
+  contains only Postgres config files, no data. The report's "Scope of
+  Health Check" section spells out this distinction per item. Datastore
+  *capacity/free-space* is not on this list -- see below.
+- **Running VM identity, datastore names, and datastore capacity are
+  host-reported, not vCenter-reported.** `vm_inventory.py` reads each
+  ESXi host's own `localcli vm process list` output (which VMs that
+  host is *currently running*), and `datastore.py` reads each host's
+  own `vmkfstools -P -v 10` dumps (datastore name/UUID and the same
+  dump's own `Capacity .../avail` line, used by
+  `fleet.datastore_usage_warning`/`fleet.datastore_usage_critical`).
+  Both work from an ESXi host bundle alone, with no vCenter member
+  required, and both have real gaps: a powered-off VM, or one with no
+  running world at capture time, will not appear; a VMFS volume mounted
+  only via its UUID symlink with no friendly-name symlink captured will
+  not have a name to resolve to; and the capacity/free-space figure is a
+  point-in-time snapshot at capture, not vCenter's historical trending
+  graph. The
   `clusterAdmin_cluster-status.txt` cluster ID parsed by
   `hardware_inventory.py` is likewise a host-reported fact (which compute
   resource this host currently thinks it belongs to), not a read of

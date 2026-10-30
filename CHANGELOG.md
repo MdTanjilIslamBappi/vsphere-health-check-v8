@@ -234,6 +234,30 @@ and the "Known limitations" section of [README.md](README.md)).
   per switch (9 total) reports `Link Status: Down` in `nicinfo.sh` --
   redundancy that was already gone and completely invisible to the
   configured-uplink-count check alone.
+- `fleet.datastore_usage_warning`/`fleet.datastore_usage_critical` rules:
+  `datastore.py` now also extracts each VMFS volume's own
+  `Capacity .../avail` line from the same `vmkfstools -P -v 10` dump it
+  already read for datastore names, and two new fleet rules compare
+  each distinct datastore's used space (deduplicated by UUID, since a
+  shared datastore is typically mounted and independently reported by
+  every host that uses it) against vCenter's own default "Datastore
+  usage on disk" alarm thresholds -- Warning at 75% used, Critical at
+  85% used (Broadcom KB 450627) -- rather than an invented number.
+  **This corrects a previously-documented limitation**: earlier
+  versions of this tool's own docs (`SUPPORTED_FORMATS.md`, this
+  report's Scope of Health Check wording) stated that datastore
+  capacity/free-space "exists only in vCenter's own inventory database"
+  and is never assessable from a support bundle. That was wrong -- it
+  is a direct per-host fact in a file already being read for an
+  unrelated purpose; only vCenter-side storage-policy compliance status
+  and historical capacity trending remain genuinely vCenter-only. All
+  affected scope/report wording is corrected in this change. **Fired
+  against real data on first try**: the real 10-host EAMSC2 bundle has
+  four real, shared datastores above the 75%-used warning threshold
+  (`ETA-DRM APP Server- Datastore` 82.5%, `Sys-Admin_Datastore08-Digital
+  Archive Project` 77.3%, `PI_Network_Volume` 75.8%, `ADMS Project Data
+  Store` 75.1%), each correctly deduplicated to one finding per
+  datastore rather than one per each of the 10 hosts that mounts it.
 
 ### Fixed
 

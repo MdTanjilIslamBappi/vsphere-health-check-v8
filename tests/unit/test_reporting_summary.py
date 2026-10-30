@@ -392,6 +392,30 @@ def test_component_status_rows_fold_sel_findings_into_storage_hardware_row():
     assert summary.category_for_rule_id("hardware.sel_ecc_uncorrectable") == "Hardware / SEL"
 
 
+def test_component_status_rows_reports_datastore_usage_finding():
+    from vhealth.models.findings import Finding, Severity
+
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        datastores=[Datastore(name="DS-01", uuid="uuid-1", naa_ids=["naa.1"])],
+    )
+    finding = Finding(
+        rule_id="fleet.datastore_usage_warning",
+        title="Datastore is running low on free space",
+        severity=Severity.MEDIUM,
+        summary="...",
+        affected_object="DS-01",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    datastores_row = rows["Datastores"]
+    assert datastores_row.status == "Advisory"
+    assert "1 nearing/at capacity" in datastores_row.remarks
+    assert summary.category_for_rule_id("fleet.datastore_usage_warning") == "Storage"
+    assert summary.category_for_rule_id("fleet.datastore_usage_critical") == "Storage"
+
+
 def test_recommendation_groups_carry_host_tagged_evidence():
     findings = [
         Finding(

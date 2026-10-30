@@ -78,6 +78,25 @@ def test_datastore_parser_reports_warning_when_no_dump_present(tmp_path):
     assert host.datastores == []
 
 
+def test_datastore_parser_extracts_capacity_and_available_bytes(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path, datastore_name="Synthetic-Datastore-01", datastore_used_fraction=0.9
+    )
+    warnings = datastore.parse(host_dir, host)
+    assert warnings == []
+    ds = host.datastores[0]
+    assert ds.capacity_bytes == 1000 * 1024**3
+    assert ds.available_bytes == int(1000 * 1024**3 * (1 - 0.9))
+
+
+def test_datastore_parser_leaves_capacity_none_when_not_given(tmp_path):
+    host_dir, host = _build_host(tmp_path, datastore_name="Synthetic-Datastore-01")
+    datastore.parse(host_dir, host)
+    ds = host.datastores[0]
+    assert ds.capacity_bytes is None
+    assert ds.available_bytes is None
+
+
 def test_vm_inventory_parser_extracts_running_vms_and_resolves_datastore(tmp_path):
     host_dir, host = _build_host(
         tmp_path, datastore_name="Synthetic-Datastore-01", vm_names=["vm-alpha", "vm-beta"]

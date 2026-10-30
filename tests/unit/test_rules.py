@@ -316,6 +316,53 @@ def test_vswitch_uplink_link_down_without_nic_data_raises_no_finding(tmp_path):
     assert "network.vswitch_all_uplinks_down" not in rule_ids
 
 
+def test_datastore_usage_warning_raises_medium_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path, datastore_name="DS-01", datastore_used_fraction=0.80
+    )
+    findings = evaluate_all_fleet([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "fleet.datastore_usage_warning" in rule_ids
+    assert "fleet.datastore_usage_critical" not in rule_ids
+
+
+def test_datastore_usage_critical_raises_high_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path, datastore_name="DS-01", datastore_used_fraction=0.90
+    )
+    findings = evaluate_all_fleet([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "fleet.datastore_usage_critical" in rule_ids
+    assert "fleet.datastore_usage_warning" not in rule_ids
+
+
+def test_datastore_usage_healthy_raises_no_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path, datastore_name="DS-01", datastore_used_fraction=0.50
+    )
+    findings = evaluate_all_fleet([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "fleet.datastore_usage_warning" not in rule_ids
+    assert "fleet.datastore_usage_critical" not in rule_ids
+
+
+def test_datastore_usage_dedups_shared_datastore_across_hosts(tmp_path):
+    """The same shared VMFS volume is typically mounted -- and independently
+
+    reported -- by every host in the assessment; it must raise one
+    finding for the real problem, not one per host that happens to mount it.
+    """
+    host_a = _assessed_host(
+        tmp_path / "a", datastore_name="DS-01", datastore_used_fraction=0.80
+    )
+    host_b = _assessed_host(
+        tmp_path / "b", datastore_name="DS-01", datastore_used_fraction=0.80
+    )
+    findings = evaluate_all_fleet([host_a, host_b])
+    usage_findings = [f for f in findings if f.rule_id == "fleet.datastore_usage_warning"]
+    assert len(usage_findings) == 1
+
+
 def test_fleet_disabled_rules_are_excluded():
     host_a = HostInfo(hostname="host-a", bundle_source="a", cpu_model="Intel Xeon Gold 6258R")
     host_b = HostInfo(hostname="host-b", bundle_source="b", cpu_model="Intel Xeon Gold 6430")

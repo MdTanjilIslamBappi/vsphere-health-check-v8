@@ -41,6 +41,11 @@ class Datastore(BaseModel):
     name: str
     uuid: str | None = None
     naa_ids: list[str] = Field(default_factory=list)
+    # Point-in-time capacity/free-space from the same vmkfstools dump --
+    # a direct per-host reading, not vCenter's historical trending. See
+    # fleet_rules.py's datastore usage checks.
+    capacity_bytes: int | None = None
+    available_bytes: int | None = None
 
 
 class VirtualMachine(BaseModel):
