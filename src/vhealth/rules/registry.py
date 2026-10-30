@@ -2,10 +2,18 @@ from __future__ import annotations
 
 from vhealth.models.findings import Finding
 from vhealth.models.host import HostInfo
-from vhealth.rules import coverage_rules, fleet_rules, log_rules, sensor_rules, storage_rules
+from vhealth.models.vcenter import VCenterInfo
+from vhealth.rules import (
+    coverage_rules,
+    fleet_rules,
+    log_rules,
+    sensor_rules,
+    storage_rules,
+    vcenter_rules,
+)
 from vhealth.rules.base import FleetRule, Rule
 
-RULE_ENGINE_VERSION = "1.2.0"
+RULE_ENGINE_VERSION = "1.3.0"
 
 ALL_RULES: list[Rule] = [
     *storage_rules.RULES,
@@ -17,6 +25,22 @@ ALL_RULES: list[Rule] = [
 ALL_FLEET_RULES: list[FleetRule] = [
     *fleet_rules.RULES,
 ]
+
+ALL_VCENTER_RULES: list[vcenter_rules.VCenterRule] = [
+    *vcenter_rules.ALL_VCENTER_RULES,
+]
+
+
+def evaluate_all_vcenter(
+    vcenter: VCenterInfo | None, disabled_rules: tuple[str, ...] = ()
+) -> list[Finding]:
+    if vcenter is None:
+        return []
+    enabled_rules = [r for r in ALL_VCENTER_RULES if r.rule_id not in disabled_rules]
+    findings: list[Finding] = []
+    for rule in enabled_rules:
+        findings.extend(rule.run(vcenter))
+    return findings
 
 
 def evaluate_all(hosts: list[HostInfo], disabled_rules: tuple[str, ...] = ()) -> list[Finding]:

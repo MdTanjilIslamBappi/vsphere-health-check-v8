@@ -1,10 +1,12 @@
-"""Turn discovered host bundles into normalised HostInfo records."""
+"""Turn discovered host and vCenter bundles into normalised model records."""
 
 from __future__ import annotations
 
-from vhealth.discovery.bundle import HostBundleRef
+from vhealth.discovery.bundle import HostBundleRef, VCenterBundleRef
 from vhealth.models.host import HostInfo
+from vhealth.models.vcenter import VCenterInfo
 from vhealth.parsers import PARSER_MODULES
+from vhealth.parsers import vcenter as vcenter_parser
 
 
 def build_host_infos(bundle_refs: list[HostBundleRef]) -> list[HostInfo]:
@@ -23,3 +25,14 @@ def build_host_infos(bundle_refs: list[HostBundleRef]) -> list[HostInfo]:
             host.parse_warnings.extend(warnings)
         hosts.append(host)
     return hosts
+
+
+def build_vcenter_info(ref: VCenterBundleRef) -> VCenterInfo:
+    """Parse one vCenter ``vc-support`` bundle directory into a VCenterInfo."""
+    vcenter = VCenterInfo(hostname=ref.hostname_hint or "vCenter Server", bundle_source=ref.root.name)
+    try:
+        warnings = vcenter_parser.parse(ref.root, vcenter)
+    except Exception as exc:  # noqa: BLE001 - a single parser must not abort the run
+        warnings = [f"vcenter parser failed unexpectedly: {exc}"]
+    vcenter.parse_warnings.extend(warnings)
+    return vcenter

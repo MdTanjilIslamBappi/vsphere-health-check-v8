@@ -15,7 +15,14 @@ from vhealth.security.extraction_guard import ExtractionLimits
 class ReportConfig:
     title: str
     company_name: str
-    logo_path: str
+    # Cover-page branding images (background graphic behind the title, the
+    # preparer's own logo, and the customer's logo). All three are optional
+    # and unset by default -- vhealth itself ships with none, and these are
+    # meant to point at image files kept *outside* this repository (e.g. a
+    # sibling directory), never committed alongside it. See README.md.
+    cover_background_image: str
+    preparer_logo_image: str
+    customer_logo_image: str
 
 
 @dataclass(frozen=True)
@@ -55,9 +62,11 @@ def load_config(user_config_path: Path | None) -> AssessmentConfig:
 
     return AssessmentConfig(
         report=ReportConfig(
-            title=report.get("title", "VMware vSphere Health Assessment"),
+            title=report.get("title", "VMware vSphere® Health Check Report"),
             company_name=report.get("company_name", ""),
-            logo_path=report.get("logo_path", ""),
+            cover_background_image=report.get("cover_background_image", ""),
+            preparer_logo_image=report.get("preparer_logo_image", ""),
+            customer_logo_image=report.get("customer_logo_image", ""),
         ),
         extraction_limits=ExtractionLimits(
             max_total_uncompressed_bytes=extraction.get(

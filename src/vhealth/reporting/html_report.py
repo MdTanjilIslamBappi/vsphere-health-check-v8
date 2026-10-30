@@ -38,7 +38,7 @@ def write_html_report(
         hosts=assessment.hosts,
         severity_counts=severity_counts,
         executive_summary=summary.executive_summary_text(assessment),
-        scope_items=summary.SCOPE_ITEMS,
+        scope_items=summary.scope_items(assessment),
         hardware_status_grid=summary.hardware_status_grid(assessment),
         component_status_rows=summary.component_status_rows(assessment),
         key_findings=summary.key_findings_at_a_glance(assessment),

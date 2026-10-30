@@ -107,4 +107,5 @@ def _parse_cluster_status(text: str, host: HostInfo) -> None:
         return
     if data.get("is_in_cluster"):
         host.cluster_id = data.get("cluster_id")
+    host.cluster_state = data.get("state")
     host.cluster_in_alarm = data.get("is_in_alarm")

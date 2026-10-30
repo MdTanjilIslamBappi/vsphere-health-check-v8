@@ -30,6 +30,19 @@ class StorageDevice(BaseModel):
     smart_raw: dict[str, str] = Field(default_factory=dict)
 
 
+class Datastore(BaseModel):
+    """A VMFS datastore (vmkfstools -P -v 10 <volume>), mapped to its backing devices.
+
+    ``naa_ids`` lets findings that only know a bare device ID (e.g. a PDL/APD
+    event against ``naa.xxxx``) show the human-readable datastore name
+    instead -- see ``HostInfo.datastore_for_naa``.
+    """
+
+    name: str
+    uuid: str | None = None
+    naa_ids: list[str] = Field(default_factory=list)
+
+
 class HardwareSensor(BaseModel):
     """An IPMI/SDR hardware sensor reading (fan, temp, voltage, PSU)."""
 
@@ -63,6 +76,7 @@ class HostInfo(BaseModel):
     vm_support_version: str | None = None
     storage_adapters: list[StorageAdapter] = Field(default_factory=list)
     storage_devices: list[StorageDevice] = Field(default_factory=list)
+    datastores: list[Datastore] = Field(default_factory=list)
     sensors: list[HardwareSensor] = Field(default_factory=list)
     log_events: list[str] = Field(default_factory=list)
     log_signal_counts: dict[str, int] = Field(default_factory=dict)
@@ -74,8 +88,22 @@ class HostInfo(BaseModel):
     cpu_sockets: int | None = None
     management_ip: str | None = None
     cluster_id: str | None = None
+    # ``cluster_state`` is the raw clusterAdmin state string ("standalone",
+    # "hosted", ...). ``cluster_name`` is resolved from the vCenter Server
+    # bundle when the assessment includes one; see
+    # ``vhealth.parsers.vcenter`` for how it is extracted.
+    cluster_state: str | None = None
+    cluster_name: str | None = None
     cluster_in_alarm: bool | None = None
     parse_warnings: list[str] = Field(default_factory=list)
+
+    def datastore_for_naa(self, naa_id: str) -> str | None:
+        """Look up the datastore name backed by a given ``naa.xxxx`` device ID."""
+        naa_id = naa_id.lower()
+        for ds in self.datastores:
+            if naa_id in (n.lower() for n in ds.naa_ids):
+                return ds.name
+        return None
 
     def coverage(self) -> dict[str, bool]:
         """Which diagnostic data categories vhealth actually found for this host.

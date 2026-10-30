@@ -8,6 +8,7 @@ the rest of the assessment can proceed.
 """
 
 from vhealth.parsers import (
+    datastore,
     hardware_inventory,
     readme,
     sensors,
@@ -21,6 +22,7 @@ PARSER_MODULES = [
     readme,
     system_version,
     storage_core,
+    datastore,
     smart,
     sensors,
     vmk_log,

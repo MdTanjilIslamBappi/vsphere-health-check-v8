@@ -43,9 +43,14 @@ class Assessment(BaseModel):
     metadata: AssessmentMetadata
     hosts: list[HostInfo] = Field(default_factory=list)
     findings: list[Finding] = Field(default_factory=list)
+    # ``vc-support`` data parsed from the bundle's vCenter Server appliance
+    # member, when the download contained one; ``None`` for host-only bundle
+    # sets. Optional field: this is additive and backward compatible.
+    vcenter: "VCenterInfo | None" = None
 
 
 from vhealth.models.findings import Finding  # noqa: E402
 from vhealth.models.host import HostInfo  # noqa: E402
+from vhealth.models.vcenter import VCenterInfo  # noqa: E402
 
 Assessment.model_rebuild()

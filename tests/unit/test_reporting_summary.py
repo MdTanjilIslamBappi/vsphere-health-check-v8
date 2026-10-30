@@ -41,6 +41,21 @@ def test_component_status_rows_flags_attention_for_high_severity_finding():
     assert rows["Overall"].status == "Attention Needed"
 
 
+def test_cluster_status_row_counts_host_with_only_resolved_cluster_name():
+    """A host resolved to a cluster purely via vCenter-side membership data
+
+    (no self-reported ``cluster_id``) must still show up as clustered, not
+    be silently dropped into the standalone bucket.
+    """
+    host = HostInfo(hostname="h1", bundle_source="h1", cluster_name="EAMSC2")
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    cluster_row = rows["Cluster Status"]
+    assert "EAMSC2" in cluster_row.remarks
+    assert "1 host" in cluster_row.remarks
+    assert "standalone" not in cluster_row.remarks
+
+
 def test_host_inventory_rows_use_unknown_for_missing_fields():
     host = HostInfo(hostname="h1", bundle_source="h1")
     assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])

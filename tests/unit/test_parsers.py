@@ -4,6 +4,7 @@ from synthetic_bundle import build_host_dir
 
 from vhealth.models.host import HostInfo
 from vhealth.parsers import (
+    datastore,
     hardware_inventory,
     readme,
     sensors,
@@ -46,6 +47,41 @@ def test_storage_core_parser_extracts_adapters_and_devices(tmp_path):
     assert len(host.storage_devices) == 2
     local = [d for d in host.storage_devices if d.is_local]
     assert local and local[0].device == "t10.synthetic_local_nvme"
+
+
+def test_datastore_parser_extracts_name_and_backing_device(tmp_path):
+    host_dir, host = _build_host(tmp_path, datastore_name="Synthetic-Datastore-01")
+    warnings = datastore.parse(host_dir, host)
+    assert warnings == []
+    assert len(host.datastores) == 1
+    assert host.datastores[0].name == "Synthetic-Datastore-01"
+    assert host.datastores[0].naa_ids == ["naa.6000000000000000000000000000001"]
+    assert (
+        host.datastore_for_naa("naa.6000000000000000000000000000001")
+        == "Synthetic-Datastore-01"
+    )
+    assert host.datastore_for_naa("naa.doesnotexist") is None
+
+
+def test_datastore_parser_reports_warning_when_no_dump_present(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = datastore.parse(host_dir, host)
+    assert warnings != []
+    assert host.datastores == []
+
+
+def test_vmk_log_evidence_is_annotated_with_datastore_name(tmp_path):
+    from vhealth.rules.log_rules import RULES
+
+    host_dir, host = _build_host(
+        tmp_path, include_pdl_warning=True, datastore_name="Synthetic-Datastore-01"
+    )
+    readme.parse(host_dir, host)
+    datastore.parse(host_dir, host)
+    vmk_log.parse(host_dir, host)
+    findings = RULES[0].evaluate(host)
+    pdl = next(f for f in findings if f.rule_id == "storage.pdl_detected")
+    assert any("(datastore: Synthetic-Datastore-01)" in e for e in pdl.evidence)
 
 
 def test_smart_parser_attaches_health_to_matching_device(tmp_path):

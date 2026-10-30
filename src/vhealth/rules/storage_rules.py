@@ -65,6 +65,12 @@ def _unredundant_single_path_device(host: HostInfo) -> list[Finding]:
         if device.is_local:
             continue
         if device.multipath_plugin and device.status and device.status.lower() != "on":
+            datastore_name = host.datastore_for_naa(device.device)
+            datastore_note = (
+                f"the '{datastore_name}' datastore"
+                if datastore_name
+                else "datastores on this device"
+            )
             findings.append(
                 Finding(
                     rule_id="storage.device_not_on",
@@ -72,7 +78,7 @@ def _unredundant_single_path_device(host: HostInfo) -> list[Finding]:
                     severity=Severity.HIGH,
                     summary=(
                         f"Device {device.device} reports status '{device.status}' instead "
-                        "of 'on'; datastores on this device may be inaccessible."
+                        f"of 'on'; {datastore_note} may be inaccessible."
                     ),
                     evidence=[f"localcli storage-core device-list: Status = {device.status}"],
                     affected_host=host.hostname,

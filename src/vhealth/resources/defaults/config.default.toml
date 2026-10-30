@@ -3,10 +3,21 @@
 # falls back to this default.
 
 [report]
-title = "VMware vSphere Health Assessment"
+title = "VMware vSphere® Health Check Report"
 company_name = ""
-# Path to a logo image file (PNG/JPEG) to place on the report cover page.
-logo_path = ""
+# Optional cover-page branding images (PNG/JPEG). All three are unset by
+# default, which is how this public tool ships -- no logos, plain cover
+# page. If you set them, point at absolute paths to image files kept
+# OUTSIDE this repository (e.g. a sibling directory on your machine);
+# never add them to version control alongside vhealth's own source.
+# Images are placed at a fixed position/size (matching a specific
+# customer-report convention), so pre-size/crop each one to roughly:
+#   cover_background_image: ~8.6in x 7.8in (behind the cover title)
+#   preparer_logo_image:    ~2.9in x 0.9in (top-left)
+#   customer_logo_image:    ~0.85in x 0.8in (top-right)
+cover_background_image = ""
+preparer_logo_image = ""
+customer_logo_image = ""
 
 [extraction]
 # Safety limits applied while extracting an untrusted support bundle.

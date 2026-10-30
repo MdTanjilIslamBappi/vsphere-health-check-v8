@@ -1,8 +1,28 @@
 from __future__ import annotations
 
+import re
+
 from vhealth.models.findings import Finding, Severity
 from vhealth.models.host import HostInfo
 from vhealth.rules.base import Rule
+
+_DEVICE_ID_RE = re.compile(r"\b(?:naa|t10|eui|mpx)\.[0-9a-zA-Z]+")
+
+
+def _annotate_datastore_names(host: HostInfo, line: str) -> str:
+    """Append the datastore name after any device ID the line mentions.
+
+    Log lines only ever carry the bare SCSI device ID (``naa.xxxx``); this
+    makes the affected datastore visible without having to cross-reference
+    the storage device inventory separately.
+    """
+
+    def _replace(match: re.Match[str]) -> str:
+        device_id = match.group(0)
+        name = host.datastore_for_naa(device_id)
+        return f"{device_id} (datastore: {name})" if name else device_id
+
+    return _DEVICE_ID_RE.sub(_replace, line)
 
 _SIGNAL_RULES = {
     "pdl_error": (
@@ -69,7 +89,11 @@ def _log_signal_findings(host: HostInfo) -> list[Finding]:
             continue
         if signal_name == "alua_no_connection" and count < _REPEAT_THRESHOLD:
             continue
-        examples = [e for e in host.log_events if e.startswith(f"[{signal_name}]")]
+        examples = [
+            _annotate_datastore_names(host, e)
+            for e in host.log_events
+            if e.startswith(f"[{signal_name}]")
+        ]
         excluded = host.log_signal_counts_excluded.get(signal_name, 0)
         findings.append(
             Finding(

@@ -85,14 +85,20 @@ def build_host_dir(
     management_ip: str = "192.168.100.10",
     cluster_id: str = "cluster-synthetic-01",
     cluster_in_alarm: bool = False,
+    datastore_name: str | None = None,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
     ``minimal_capture=True`` mimics a reduced/incident-mode vm-support run
     (observed in real EAMSC2 bundles): only README and system-version are
     present, with no storage-core, SMART, IPMI, or log data at all.
+
+    ``datastore_name``, if given, adds a ``vmkfstools -P -v 10`` dump for a
+    VMFS datastore backed by the synthetic SAN disk
+    (``naa.6000000000000000000000000000001``), so a rule's output can be
+    checked for the resolved datastore name instead of the bare device ID.
     """
-    bundle_dir = root / f"esx-{hostname}-2026-01-15--10.00-9999999"
+    bundle_dir = root / f"esx-{hostname}-2026-01-15"
     (bundle_dir / "commands").mkdir(parents=True)
     (bundle_dir / "json").mkdir()
 
@@ -212,6 +218,21 @@ def build_host_dir(
         encoding="utf-8",
     )
 
+    if datastore_name is not None:
+        vmkfstools_dump = (
+            "VMFS-6.82 (Raw Major Version: 24) file system spanning 1 partitions.\n"
+            f"File system label (if any): {datastore_name}\n"
+            "Mode: public ATS-only\n"
+            "UUID: 6000000-0000000-0000-000000000001\n"
+            "Partitions spanned (on \"lvm\"):\n"
+            "\tnaa.6000000000000000000000000000001:1\n"
+        )
+        (
+            bundle_dir
+            / "commands"
+            / f"vmkfstools_-P--v-10-vmfsvolumes{datastore_name}.txt"
+        ).write_text(vmkfstools_dump, encoding="utf-8")
+
     return bundle_dir
 
 
@@ -235,5 +256,127 @@ def build_vcenter_zip(output_path: Path, hostnames: list[str]) -> Path:
         for hostname in hostnames:
             tgz_path = staging / f"{hostname}.tgz"
             build_tgz(tgz_path, hostname=hostname)
+            zf.write(tgz_path, arcname=tgz_path.name)
+    return output_path
+
+
+# --- vCenter Server (vc-support) bundle fixtures ---------------------------
+
+_VCSA_README = """Command line: vc-support /bin/vc-support -q -w /etc/vmware-vpx/bundle-stage
+Bundle name: None
+Captured on: 2026-01-15 11:00:00.000000
+vm-support version: v4.1
+
+Files/Directories of Interest:
+------------------------------
+commands: a directory containing output files for all commands run
+"""
+
+_VCSA_UNAME = "Linux vcsa.example.test 5.10.0-1.ph4 #1-photon SMP x86_64 GNU/Linux\n"
+
+_VCSA_RPM = """VMware-vpxd-8.0.3.00900-12345678.x86_64
+VMware-vpxd-agents-eesx-8.0.3.00900-12345678.x86_64
+vsphere-ui-8.0.3.00900-12345678.noarch
+openssh-server-8.9-1.ph4.x86_64
+"""
+
+_VCSA_SERVICES = """Running:
+ applmgmt lookupsvc vmdird vmware-vpxd vmware-vpostgres vmware-rhttpproxy
+Stopped:
+ vmcam vmonapi vmware-imagebuilder vmware-vcha
+"""
+
+_VCSA_DF = """Filesystem                               1K-blocks     Used Available Use% Mounted on
+devtmpfs                                      4096        0      4096   0% /dev
+/dev/mapper/vg_root_0-lv_root_0           49222292 16738388  29951144  36% /
+/dev/mapper/db_vg-db                      25618660 23056794   20601068  92% /storage/db
+/dev/mapper/archive_vg-archive           102618040 92358504   5000684  95% /storage/archive
+tmpfs                                         1024        0      1024   1% /var/spool/snmp
+"""
+
+_VPXD_LOG = """2026-01-15T07:44:43.913Z info vpxd[07159] [Originator@6876 sub=MoCluster opID=CSMM-domain-c1001-168231] Dispatching cluster store membership request; {00007fee8c005300, HEALTH, domain-c1001, (null), attempt: 168107}
+2026-01-15T07:44:58.322Z info vpxd[07176] [Originator@6876 sub=cdrsPlmt opID=CdrsLoadBalancer-90f017f] Dump section 10260733345838 created for cluster [vim.ClusterComputeResource:domain-c1001,EAMSC2]
+"""
+
+# Membership lines carry the member host morefs on the same line; each
+# ``[vim.HostSystem:host-N,HOSTNAME]`` chunk is one member.
+_VCLS_MEMBERSHIP_LINE = (
+    "2026-01-15T07:44:20.148Z info vpxd[2422740] [Originator@6876 sub=MoCluster "
+    "opID=PodCrxMgr-domain-c1001-174317] Dumping vCLS Pod Crx host infos; domain-c1001, "
+    "[{[vim.HostSystem:host-13043,esx01-synthetic.example.test], st: 0, vm: (null), t: "
+    "}, {[vim.HostSystem:host-13044,esx02-synthetic.example.test], st: 0, vm: (null)}"
+    ", attempt: 174317}\n"
+)
+
+
+def build_vcsa_dir(
+    root: Path,
+    cluster_name: str = "EAMSC2",
+    cluster_moref: str = "domain-c1001",
+    vcls_membership: bool = True,
+) -> Path:
+    """Create a synthetic vc-support appliance bundle directory under ``root``.
+
+    Directory names are deliberately kept short: the extraction guard
+    skips paths longer than Windows' safe-MAX_PATH (240 chars), so long
+    fixture names would silently produce an empty bundle under the
+    pytest tmp_path prefix.
+    """
+    dir_name = "vc-vcsa.example.test"
+    bundle_dir = root / dir_name
+    (bundle_dir / "commands").mkdir(parents=True)
+    (bundle_dir / "var" / "log" / "vmware" / "vpxd").mkdir(parents=True)
+
+    (bundle_dir / "README").write_text(_VCSA_README, encoding="utf-8")
+    (bundle_dir / "commands" / "uname_-a.txt").write_text(_VCSA_UNAME, encoding="utf-8")
+    (bundle_dir / "commands" / "rpm_-qa.txt").write_text(_VCSA_RPM, encoding="utf-8")
+    (bundle_dir / "commands" / "service-control_--status---all.txt").write_text(
+        _VCSA_SERVICES, encoding="utf-8"
+    )
+    (bundle_dir / "commands" / "df.txt").write_text(_VCSA_DF, encoding="utf-8")
+
+    log_text = _VPXD_LOG.replace("domain-c1001", cluster_moref).replace("EAMSC2", cluster_name)
+    if vcls_membership:
+        log_text += _VCLS_MEMBERSHIP_LINE.replace("domain-c1001", cluster_moref)
+    (bundle_dir / "var" / "log" / "vmware" / "vpxd" / "vpxd-2508.log").write_text(
+        log_text, encoding="utf-8"
+    )
+    return bundle_dir
+
+
+def build_vcenter_bundle_tgz(output_path: Path, **vcsa_kwargs) -> Path:
+    """Build a synthetic vCenter appliance bundle as a .tgz file."""
+    staging = output_path.parent / f"_staging_{output_path.stem}"
+    staging.mkdir(parents=True, exist_ok=True)
+    bundle_dir = build_vcsa_dir(staging, **vcsa_kwargs)
+
+    with tarfile.open(output_path, "w:gz") as tf:
+        tf.add(bundle_dir, arcname=bundle_dir.name)
+    return output_path
+
+
+def build_vcenter_zip_with_vcsa(
+    output_path: Path, hostnames: list[str], host_cluster_id: str | None = None, **vcsa_kwargs
+) -> Path:
+    """Build a ZIP with per-host .tgz members plus one vCenter .tgz member.
+
+    ``host_cluster_id`` is passed to each host bundle's clusterAdmin
+    cluster-status output (defaults to the synthetic host fixture's own
+    value).
+    """
+    staging = output_path.parent / f"_staging_{output_path.stem}"
+    staging.mkdir(parents=True, exist_ok=True)
+
+    vcsa_tgz = staging / "vcsa.tgz"
+    build_vcenter_bundle_tgz(vcsa_tgz, **vcsa_kwargs)
+
+    with zipfile.ZipFile(output_path, "w") as zf:
+        zf.write(vcsa_tgz, arcname=vcsa_tgz.name)
+        for hostname in hostnames:
+            tgz_path = staging / f"{hostname}.tgz"
+            if host_cluster_id is not None:
+                build_tgz(tgz_path, hostname=hostname, cluster_id=host_cluster_id)
+            else:
+                build_tgz(tgz_path, hostname=hostname)
             zf.write(tgz_path, arcname=tgz_path.name)
     return output_path
