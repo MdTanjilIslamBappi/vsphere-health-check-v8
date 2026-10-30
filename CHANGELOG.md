@@ -106,6 +106,14 @@ and the "Known limitations" section of [README.md](README.md)).
   `vhealth-windows-amd64.exe` (~18 MB) ran `--version` and a full
   `assess` (bundled templates/config/schema included) outside the repo
   and outside the dev virtualenv. **Not yet built or tested on Linux.**
+- `hardware.ntp_not_synchronized` rule and `ntp.py` parser: reads each
+  ESXi host's own `localcli system ntp get` output and flags a host
+  whose clock is not actually synchronized, regardless of whether the
+  NTP service is enabled -- no vCenter bundle required. Surfaced as a
+  new "Time Synchronization (NTP)" row in the report's component-status
+  table. Validated against a real 10-host EAMSC2 bundle: correctly
+  flagged the one host (`eamsc2esxi02`) genuinely reporting
+  `Time Synchronized: false`, and stayed silent on the other 9.
 
 ### Fixed
 
