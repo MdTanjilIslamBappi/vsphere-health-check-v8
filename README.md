@@ -39,6 +39,25 @@ Both scripts create a project-local virtual environment (`.venv`), install
 pinned dependencies from `uv.lock`, install `vhealth` into it, and print
 the exact command to run it.
 
+## Uninstall
+
+```bash
+./scripts/uninstall.sh      # Linux/macOS
+# or
+.\scripts\uninstall.ps1     # Windows PowerShell
+```
+
+This removes the `.venv` virtual environment and any local build/test
+caches (`dist/`, `build/`, `.pytest_cache/`, etc.) — i.e. everything
+`install.sh`/`install.ps1` created. It does **not** remove `uv` or Python
+themselves (they're outside this repo and likely used by other projects),
+and it does **not** touch any report folders you passed to `vhealth
+assess --output ...` — those are your own generated output.
+
+To remove vhealth completely, also delete the folder you cloned the repo
+into, and uninstall `uv` itself if you don't need it elsewhere (see
+[the uv docs](https://docs.astral.sh/uv/getting-started/installation/#uninstallation)).
+
 ## Usage
 
 ```bash

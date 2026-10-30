@@ -28,6 +28,10 @@ and the "Known limitations" section of [README.md](README.md)).
   versions, evidence manifest, processing warnings).
 - HTML (Jinja2) and Word (`python-docx`) report generation from either a
   fresh assessment or a saved `assessment.json`.
+- `scripts/uninstall.ps1`/`.sh`, removing everything `install.ps1`/`.sh`
+  created (the project-local `.venv` and local build/test caches), and a
+  [Beginner's Guide](docs/BEGINNER_GUIDE.md) for readers new to the
+  command line, Python tooling, or VMware terminology.
 - `scripts/install.ps1` / `scripts/install.sh` for a reproducible,
   project-local, non-admin install via `uv`.
 - Unit, integration, security and cross-platform test suites using

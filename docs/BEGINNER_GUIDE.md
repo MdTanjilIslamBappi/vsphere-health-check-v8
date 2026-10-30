@@ -207,7 +207,39 @@ A few VMware terms you may see in findings:
 | `vhealth.exe` won't launch / silently does nothing on a corporate Windows machine | Some corporate "Application Control" policies block unsigned `.exe` shims. Use `.\.venv\Scripts\python.exe -m vhealth.cli` instead — same tool, same result, just invoked through Python directly. |
 | `uv sync --locked` fails | The repo's lock file and dependency list disagree — this would indicate a packaging bug; please open an issue. |
 
-## 10. Where to go next
+## 10. Uninstalling when you're done
+
+vhealth only ever installed things inside its own `.venv` folder inside
+the repo — it never touched anything system-wide. To remove it:
+
+**Windows (PowerShell):**
+
+```bash
+.\scripts\uninstall.ps1
+```
+
+**Linux:**
+
+```bash
+./scripts/uninstall.sh
+```
+
+This deletes `.venv` and any local test/build leftovers. It's safe to
+run even if you already removed things by hand, or never finished
+installing — it just reports there's nothing to do.
+
+It will **not** delete:
+
+- `uv` or Python themselves — they were installed separately (step 4),
+  not by vhealth, and other projects on your machine might use them
+- any report folder you gave to `vhealth assess --output ...` — those
+  are your own files
+
+If you want the whole thing gone, including the source code, delete the
+entire folder you cloned in step 3 (e.g. `vsphere-health-check-v8`) after
+running the uninstall script.
+
+## 11. Where to go next
 
 - [README.md](../README.md) — the quick-reference version of this guide
 - [SUPPORTED_FORMATS.md](../SUPPORTED_FORMATS.md) — exactly which bundle
