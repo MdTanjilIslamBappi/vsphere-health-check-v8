@@ -14,6 +14,10 @@ Early alpha. See [CHANGELOG.md](CHANGELOG.md) for what has actually been
 built and tested so far, and [SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md)
 for which bundle formats and ESXi versions have been validated.
 
+New to this, or new to the command line / VMware in general? Start with
+the [Beginner's Guide](docs/BEGINNER_GUIDE.md) instead — it walks through
+every step in plain English.
+
 ## Requirements
 
 * Python 3.11+
@@ -24,8 +28,8 @@ for which bundle formats and ESXi versions have been validated.
 ## Install
 
 ```bash
-git clone https://github.com/example/vmware-health-assessment.git
-cd vmware-health-assessment
+git clone https://github.com/MdTanjilIslamBappi/vsphere-health-check-v8.git
+cd vsphere-health-check-v8
 ./scripts/install.sh        # Linux/macOS
 # or
 .\scripts\install.ps1       # Windows PowerShell
