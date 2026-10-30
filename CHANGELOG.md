@@ -188,6 +188,31 @@ and the "Known limitations" section of [README.md](README.md)).
   without first deciding where output should go. Verified by running
   this exact one-line form against the real 4.6GB EAMSC2 bundle end to
   end (extraction through report generation).
+- `hardware.sel_ecc_uncorrectable`, `hardware.sel_drive_predictive_failure`,
+  `hardware.sel_psu_failure`, and `hardware.sel_temperature_critical`
+  rules and `ipmi_sel.py` parser: read each ESXi host's own IPMI System
+  Event Log (`esxcli hardware ipmi sel list`), a historical event log
+  distinct from the current-sensor-state `hardware.ipmi_sensor_asserted`
+  rule -- a transient event that already cleared itself (a drive pulled
+  and replaced, a brief PSU blip) still shows up here even though the
+  live sensor reading is clean again at capture time. Only `Assert +`
+  records matching a hand-picked set of unambiguous hardware-failure
+  message types are tracked; routine SEL chatter (boot/shutdown,
+  log-area-reset housekeeping, chassis intrusion, and the more ambiguous
+  AC-lost/redundancy-state message types) is intentionally not reported
+  on. Same 90-day quarterly log-window scoping as the existing
+  vmkwarning/vobd-derived rules (`log_rules.py`), reusing the same
+  `host.log_signal_counts`/`log_signal_counts_excluded`/`log_events`
+  fields. Folded into the existing "Storage & Hardware Findings"
+  component row and "Hardware / SEL" category rather than a new row.
+  **Fired against real data on first try**: the real 10-host EAMSC2
+  bundle's SEL history for `eamsc2esxi17` shows `Assert + Drive Slot
+  Predictive Failure` on 2026-08-01, within the 90-day window of the
+  bundle's 2026-10-26 capture date; the same SEL history also contains
+  real (but 9+ months stale, correctly excluded) ECC, PSU-failure, and
+  critical-temperature events on other hosts, confirming the message
+  matching end to end even though only the drive-predictive-failure
+  signal is young enough to raise an active finding in this bundle.
 
 ### Fixed
 

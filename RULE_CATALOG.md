@@ -37,6 +37,10 @@ see "Adding a rule" below.
 | `hardware.community_supported_vib_installed` | Other | Host has a CommunitySupported (unsupported) VIB installed | Medium | `community_supported_vibs` (from `esxcli software vib list`) | Only reports the acceptance level ESXi itself records; cannot see any separately-granted VMware GSS exception for a specific VIB in this environment. |
 | `network.vswitch_single_uplink` | Network | Network switch has only one uplink (no NIC redundancy) | Medium | `network_switches[].uplinks` (from `esxcfg-vswitch -l`) | Only counts the reported uplink NIC list; cannot see whether those NICs are actually independent upstream (e.g. the same top-of-rack switch). Excludes the virtual `vusb*` uplink used by the BMC/iDRAC out-of-band management vSwitch, which has no physical redundancy to have by design. |
 | `fleet.vswitch_mtu_mismatch` (**fleet rule**) | Network | Inconsistent MTU for the same vSwitch/DVS across hosts | Medium | `network_switches[].mtu` (from `esxcfg-vswitch -l`) on 2+ hosts in the assessment | Compares switches by exact name match across this assessment's hosts only; a standard vSwitch name reused per-host with an intentionally different MTU would also match, and it has no visibility into actual vCenter cluster membership. |
+| `hardware.sel_ecc_uncorrectable` | Hardware / SEL | Uncorrectable memory (ECC) error recorded in the IPMI event log | Critical | `log_signal_counts.sel_ecc_uncorrectable`, `log_events` (from `esxcli hardware ipmi sel list`) | Same 90-day quarterly scoping as PDL. Only `Assert +` SEL records are considered; a later `Deassert` for the same condition is not distinguished, so this reports that the condition occurred, not whether it is still active. |
+| `hardware.sel_drive_predictive_failure` | Hardware / SEL | Drive predictive-failure event recorded in the IPMI event log | High | `log_signal_counts.sel_drive_predictive_failure`, `log_events` (from `esxcli hardware ipmi sel list`) | Same 90-day quarterly scoping and Assert-only caveat as above. This is the storage backplane/HBA's own predictive-failure signal, independent of ESXi's SMART polling (`storage.smart_health_not_ok`). |
+| `hardware.sel_psu_failure` | Hardware / SEL | Power supply failure event recorded in the IPMI event log | High | `log_signal_counts.sel_psu_failure`, `log_events` (from `esxcli hardware ipmi sel list`) | Same 90-day quarterly scoping and Assert-only caveat as above. Only the explicit "Failure status" message is matched; the more ambiguous "AC lost"/"Redundancy Lost" SEL message types are intentionally not tracked to avoid flagging routine PDU/maintenance power blips. |
+| `hardware.sel_temperature_critical` | Hardware / SEL | Critical temperature threshold event recorded in the IPMI event log | High | `log_signal_counts.sel_temperature_critical`, `log_events` (from `esxcli hardware ipmi sel list`) | Same 90-day quarterly scoping and Assert-only caveat as above. Only the "Upper Critical" threshold message is matched; the earlier "Upper Non-critical" warning message is intentionally not tracked. |
 
 ## Validation status
 
@@ -129,6 +133,26 @@ and the parser still reads it correctly.
 `fleet.vswitch_mtu_mismatch` has not yet been observed firing (every
 switch in every real bundle seen so far is MTU 1500 everywhere) and is
 covered by a synthetic unit test only.
+
+The four `hardware.sel_*` rules (IPMI System Event Log history, a
+different source from the current-state-only `hardware.ipmi_sensor_asserted`)
+were validated against the same real 10-host EAMSC2 bundle.
+`hardware.sel_drive_predictive_failure` has fired against real data:
+host `eamsc2esxi17`'s SEL shows `Assert + Drive Slot Predictive Failure`
+on 2026-08-01, within the 90-day window of the bundle's 2026-10-26
+capture date (a later `Deassert + Drive Slot Predictive Failure` and
+`Deassert + Drive Slot Drive Present` on 2026-09-19 suggest the drive
+was already pulled/replaced by capture time, but this rule does not
+distinguish that -- see its limitations). The real bundle's SEL history
+also contains `Assert + Memory Uncorrectable ECC` (`eamsc2esxi09`),
+`Assert + Power Supply Failure status` (6 hosts), and
+`Assert + Temperature Upper Critical going high` (`eamsc2esxi08`)
+events, confirming the parser/message matching is correct end to end --
+but every one of those specific events is from January/February 2026,
+9+ months before the October capture date, so they correctly land in
+`log_signal_counts_excluded` rather than firing a finding; the in-window
+firing path for `sel_ecc_uncorrectable`, `sel_psu_failure`, and
+`sel_temperature_critical` is covered by a synthetic unit test only.
 
 ## Adding a rule
 

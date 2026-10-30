@@ -228,6 +228,43 @@ def test_vswitch_matching_mtu_raises_no_fleet_finding():
     assert "fleet.vswitch_mtu_mismatch" not in rule_ids
 
 
+def test_sel_ecc_uncorrectable_raises_critical_finding(tmp_path):
+    host = _assessed_host(tmp_path, ipmi_sel_message="Assert + Memory Uncorrectable ECC")
+    findings = evaluate_all([host])
+    ecc_findings = [f for f in findings if f.rule_id == "hardware.sel_ecc_uncorrectable"]
+    assert len(ecc_findings) == 1
+    assert ecc_findings[0].severity.value == "critical"
+
+
+def test_sel_drive_predictive_failure_raises_high_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path, ipmi_sel_message="Assert + Drive Slot Predictive Failure"
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "hardware.sel_drive_predictive_failure" in rule_ids
+
+
+def test_sel_deassert_message_raises_no_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path, ipmi_sel_message="Deassert + Drive Slot Predictive Failure"
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert not any(rid.startswith("hardware.sel_") for rid in rule_ids)
+
+
+def test_sel_event_older_than_one_quarter_raises_no_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path,
+        ipmi_sel_message="Assert + Power Supply Failure status",
+        ipmi_sel_when="2025-01-10T10:05:00",
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "hardware.sel_psu_failure" not in rule_ids
+
+
 def test_fleet_disabled_rules_are_excluded():
     host_a = HostInfo(hostname="host-a", bundle_source="a", cpu_model="Intel Xeon Gold 6258R")
     host_b = HostInfo(hostname="host-b", bundle_source="b", cpu_model="Intel Xeon Gold 6430")

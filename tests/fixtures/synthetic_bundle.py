@@ -96,6 +96,8 @@ def build_host_dir(
     vswitch_name: str = "Synthetic-DVS-01",
     vswitch_uplinks: list[str] | None = None,
     vswitch_mtu: int = 1500,
+    ipmi_sel_message: str | None = None,
+    ipmi_sel_when: str = "2026-01-15T10:05:00",
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -141,6 +143,11 @@ def build_host_dir(
     ``vswitch_name`` with that uplink list and ``vswitch_mtu``; left as
     ``None``, no vSwitch/DVS data is written at all (network not
     assessed).
+
+    ``ipmi_sel_message``, if given, adds an ``esxcli hardware ipmi sel
+    list`` dump with one record carrying that exact ``Message`` text
+    (e.g. ``"Assert + Memory Uncorrectable ECC"``) timestamped
+    ``ipmi_sel_when``; left as ``None``, no SEL data is written at all.
     """
     bundle_dir = root / f"esx-{hostname}-2026-01-15"
     (bundle_dir / "commands").mkdir(parents=True)
@@ -379,6 +386,24 @@ def build_host_dir(
         (bundle_dir / "commands" / "esxcfg-vswitch_-l.txt").write_text(
             stanza, encoding="utf-8"
         )
+
+    if ipmi_sel_message is not None:
+        sel_dump = (
+            "Record:1:\n"
+            "   Record Id: 1\n"
+            f"   When: {ipmi_sel_when}\n"
+            "   Event Type: 111 (Unknown)\n"
+            "   SEL Type: 2 (System Event)\n"
+            f"   Message: {ipmi_sel_message}\n"
+            "   Sensor Number: 50\n"
+            "   Raw: \n"
+            "   Formatted-Raw: 01 00 02 00 00 00 00 00 00 00 00 00 00 00 ff ff \n"
+        )
+        (
+            bundle_dir
+            / "commands"
+            / "localcli_hardware-ipmi-sel-list--p--i--n-all.txt"
+        ).write_text(sel_dump, encoding="utf-8")
 
     return bundle_dir
 

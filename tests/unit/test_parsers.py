@@ -7,6 +7,7 @@ from vhealth.parsers import (
     coredump,
     datastore,
     hardware_inventory,
+    ipmi_sel,
     multipath,
     ntp,
     readme,
@@ -346,3 +347,43 @@ def test_vswitch_parser_reports_warning_when_file_missing(tmp_path):
     warnings = vswitch.parse(host_dir, host)
     assert warnings != []
     assert host.network_switch_data_available is False
+
+
+def test_ipmi_sel_parser_counts_drive_predictive_failure_signal(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path, ipmi_sel_message="Assert + Drive Slot Predictive Failure"
+    )
+    readme.parse(host_dir, host)  # sets host.captured_on, which the quarterly cutoff needs
+    warnings = ipmi_sel.parse(host_dir, host)
+    assert warnings == []
+    assert host.log_signal_counts.get("sel_drive_predictive_failure", 0) == 1
+    assert any("sel_drive_predictive_failure" in e for e in host.log_events)
+
+
+def test_ipmi_sel_parser_ignores_deassert_and_unmapped_messages(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path, ipmi_sel_message="Deassert + Drive Slot Predictive Failure"
+    )
+    readme.parse(host_dir, host)
+    warnings = ipmi_sel.parse(host_dir, host)
+    assert warnings == []
+    assert host.log_signal_counts == {}
+
+
+def test_ipmi_sel_parser_excludes_events_older_than_one_quarter(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path,
+        ipmi_sel_message="Assert + Memory Uncorrectable ECC",
+        ipmi_sel_when="2025-01-10T10:05:00",
+    )
+    readme.parse(host_dir, host)  # captured_on is 2026-01-15; this is ~1 year earlier
+    warnings = ipmi_sel.parse(host_dir, host)
+    assert warnings == []
+    assert host.log_signal_counts.get("sel_ecc_uncorrectable", 0) == 0
+    assert host.log_signal_counts_excluded.get("sel_ecc_uncorrectable", 0) == 1
+
+
+def test_ipmi_sel_parser_reports_warning_when_file_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = ipmi_sel.parse(host_dir, host)
+    assert warnings != []

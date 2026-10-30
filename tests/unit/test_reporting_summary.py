@@ -354,6 +354,19 @@ def test_recommendation_groups_assign_category_by_rule_id():
     assert by_title["Limited data"] == "Other"
 
 
+def test_component_status_rows_fold_sel_findings_into_storage_hardware_row():
+    findings = [
+        Finding(
+            rule_id="hardware.sel_ecc_uncorrectable", title="ECC", severity=Severity.CRITICAL,
+            summary="...", affected_host="h1",
+        ),
+    ]
+    assessment = Assessment(metadata=_metadata(), hosts=[], findings=findings)
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["Storage & Hardware Findings"].status == "Attention Needed"
+    assert summary.category_for_rule_id("hardware.sel_ecc_uncorrectable") == "Hardware / SEL"
+
+
 def test_recommendation_groups_carry_host_tagged_evidence():
     findings = [
         Finding(

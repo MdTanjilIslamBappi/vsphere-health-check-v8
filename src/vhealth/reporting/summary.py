@@ -34,7 +34,13 @@ _LOG_SIGNAL_RULE_IDS = {
     "storage.alua_path_connectivity",
     "storage.vob_problem_event",
 }
-_SENSOR_RULE_IDS = {"hardware.ipmi_sensor_asserted"}
+_SENSOR_RULE_IDS = {
+    "hardware.ipmi_sensor_asserted",
+    "hardware.sel_ecc_uncorrectable",
+    "hardware.sel_drive_predictive_failure",
+    "hardware.sel_psu_failure",
+    "hardware.sel_temperature_critical",
+}
 _PROCESSOR_RULE_IDS = {"fleet.cpu_model_mismatch"}
 _NTP_RULE_IDS = {"hardware.ntp_not_synchronized"}
 _COREDUMP_RULE_IDS = {"hardware.coredump_not_configured"}
@@ -831,6 +837,10 @@ _CATEGORY_BY_RULE_ID = {
     "storage.alua_path_connectivity": "Storage",
     "storage.vob_problem_event": "Storage",
     "hardware.ipmi_sensor_asserted": "Hardware / SEL",
+    "hardware.sel_ecc_uncorrectable": "Hardware / SEL",
+    "hardware.sel_drive_predictive_failure": "Hardware / SEL",
+    "hardware.sel_psu_failure": "Hardware / SEL",
+    "hardware.sel_temperature_critical": "Hardware / SEL",
     "fleet.cpu_model_mismatch": "CPU",
     "hardware.ntp_not_synchronized": "Other",
     "hardware.coredump_not_configured": "Other",

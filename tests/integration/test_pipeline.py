@@ -119,6 +119,17 @@ def test_run_assessment_flags_host_with_single_uplink_switch(tmp_path):
     assert "network.vswitch_single_uplink" in rule_ids
 
 
+def test_run_assessment_flags_host_with_ipmi_sel_drive_predictive_failure(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz", ipmi_sel_message="Assert + Drive Slot Predictive Failure"
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "hardware.sel_drive_predictive_failure" in rule_ids
+
+
 def test_run_assessment_on_multi_host_vcenter_zip(tmp_path):
     bundle_path = build_vcenter_zip(
         tmp_path / "vc.zip", hostnames=["esxi-a.example.test", "esxi-b.example.test"]
