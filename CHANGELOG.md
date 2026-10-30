@@ -114,6 +114,15 @@ and the "Known limitations" section of [README.md](README.md)).
   table. Validated against a real 10-host EAMSC2 bundle: correctly
   flagged the one host (`eamsc2esxi02`) genuinely reporting
   `Time Synchronized: false`, and stayed silent on the other 9.
+- `hardware.coredump_not_configured` rule and `coredump.py` parser:
+  reads each ESXi host's own `localcli system coredump file list`
+  output and flags a host with no kernel-coredump target marked both
+  Active and Configured -- without one, a PSOD leaves no crash dump to
+  root-cause it. Surfaced as a new "Kernel Coredump Configuration" row
+  in the report's component-status table. Table parsing confirmed
+  against a real 10-host EAMSC2 bundle (all 10 correctly resolve as
+  configured); the firing (not-configured) case has not yet been
+  observed against real data and is covered by a synthetic test only.
 
 ### Fixed
 

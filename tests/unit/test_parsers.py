@@ -4,6 +4,7 @@ from synthetic_bundle import build_host_dir
 
 from vhealth.models.host import HostInfo
 from vhealth.parsers import (
+    coredump,
     datastore,
     hardware_inventory,
     ntp,
@@ -201,6 +202,7 @@ def test_parsers_report_warnings_when_evidence_missing(tmp_path):
     assert hardware_inventory.parse(empty_dir, host) != []
     assert vm_inventory.parse(empty_dir, host) != []
     assert ntp.parse(empty_dir, host) != []
+    assert coredump.parse(empty_dir, host) != []
 
 
 def test_hardware_inventory_parser_extracts_server_and_cpu_model(tmp_path):
@@ -243,3 +245,30 @@ def test_ntp_parser_reports_warning_when_file_missing(tmp_path):
     warnings = ntp.parse(host_dir, host)
     assert warnings != []
     assert host.ntp_data_available is False
+
+
+def test_coredump_parser_extracts_configured_state(tmp_path):
+    host_dir, host = _build_host(tmp_path, coredump_configured=True)
+    warnings = coredump.parse(host_dir, host)
+    assert warnings == []
+    assert host.coredump_data_available is True
+    assert host.coredump_configured is True
+    assert host.coredump_active_path == (
+        "/vmfs/volumes/synthetic-uuid/vmkdump/synthetic.dumpfile"
+    )
+
+
+def test_coredump_parser_extracts_not_configured_state(tmp_path):
+    host_dir, host = _build_host(tmp_path, coredump_configured=False)
+    warnings = coredump.parse(host_dir, host)
+    assert warnings == []
+    assert host.coredump_data_available is True
+    assert host.coredump_configured is False
+    assert host.coredump_active_path is None
+
+
+def test_coredump_parser_reports_warning_when_file_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = coredump.parse(host_dir, host)
+    assert warnings != []
+    assert host.coredump_data_available is False

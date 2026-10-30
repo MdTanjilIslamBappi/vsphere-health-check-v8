@@ -31,6 +31,7 @@ see "Adding a rule" below.
 | `coverage.limited_diagnostic_data` | Other | Limited diagnostic data available in this support bundle | Low (Info if only 1-2 categories missing) | `coverage()` -- derived from `storage_adapters`/`storage_devices`/`smart_data`/`hardware_sensors`/`log_signals`/`hardware_inventory` presence | Reports what is missing, not why; cannot distinguish a reduced/incident-mode vm-support capture from hardware that genuinely has nothing to report (e.g. no local disks). |
 | `fleet.cpu_model_mismatch` (**fleet rule**) | CPU | Multiple CPU models detected across assessed hosts | Medium | `cpu_model` (from `smbiosDump.txt`) on 2+ hosts in the assessment | Compares raw SMBIOS CPU model strings across hosts in this assessment only; has no visibility into actual vCenter cluster membership or EVC configuration, so it cannot tell you whether these hosts share a cluster or whether EVC already mitigates the mismatch. |
 | `hardware.ntp_not_synchronized` | Other | Host clock is not synchronized via NTP | Medium | `ntp_time_synchronized`, `ntp_servers` (from `esxcli system ntp get`) | Point-in-time snapshot from the bundle's capture moment only; a host that synced (or lost sync) before/after capture is not reflected. Does not distinguish "NTP service disabled" from "enabled but server unreachable" -- both surface as `Time Synchronized = false`. |
+| `hardware.coredump_not_configured` | Other | No active kernel-coredump target configured | Medium | `coredump_configured` (from `esxcli system coredump file list`) | Point-in-time snapshot at capture only. Implemented from documented esxcli behaviour; every real bundle seen so far has at least one `Active=true`/`Configured=true` row, so the firing (not-configured) case has not yet been observed against real-world data -- see below. |
 
 ## Validation status
 
@@ -77,6 +78,16 @@ EAMSC2 bundle: `localcli system ntp get` on `eamsc2esxi02` genuinely
 reports `"Time Synchronized": false` while the other 9 hosts in the same
 bundle all report `true`, so the rule correctly fires on exactly the one
 host with a real, currently-unresolved clock-sync problem.
+
+`hardware.coredump_not_configured`'s table parsing (`localcli system
+coredump file list`, via the shared `parse_fixed_width_table` helper) was
+confirmed against the same real 10-host EAMSC2 bundle: all 10 hosts
+report exactly one row with `Active=true`/`Configured=true`, so the
+non-firing path is real-data-validated. The firing path (no such row --
+either an empty table or one with `Active=false`/`Configured=false`) is
+implemented from documented `esxcli` behaviour and covered by a
+synthetic unit test only, per the "Do not add a rule..." rule below,
+since no real bundle seen so far has a misconfigured coredump target.
 
 ## Adding a rule
 

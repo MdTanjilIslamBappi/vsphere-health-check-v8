@@ -25,6 +25,7 @@ def test_component_status_rows_marks_unassessed_vcenter_sections():
     assert rows["Datastores"].status == summary.NOT_ASSESSED
     assert rows["Virtual Machines"].status == summary.NOT_ASSESSED
     assert rows["Time Synchronization (NTP)"].status == summary.NOT_ASSESSED
+    assert rows["Kernel Coredump Configuration"].status == summary.NOT_ASSESSED
 
 
 def test_component_status_rows_reports_real_datastore_and_vm_data_when_present():
@@ -105,6 +106,43 @@ def test_component_status_rows_reports_ntp_healthy_when_all_synced():
     rows = {row.component: row for row in summary.component_status_rows(assessment)}
     ntp_row = rows["Time Synchronization (NTP)"]
     assert ntp_row.status == "Healthy"
+
+
+def test_component_status_rows_reports_coredump_not_configured():
+    from vhealth.models.findings import Finding, Severity
+
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        coredump_data_available=True,
+        coredump_configured=False,
+    )
+    finding = Finding(
+        rule_id="hardware.coredump_not_configured",
+        title="No active kernel-coredump target configured",
+        severity=Severity.MEDIUM,
+        summary="...",
+        affected_host="h1",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    coredump_row = rows["Kernel Coredump Configuration"]
+    assert coredump_row.status != summary.NOT_ASSESSED
+    assert "h1" in coredump_row.remarks
+
+
+def test_component_status_rows_reports_coredump_healthy_when_configured():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        coredump_data_available=True,
+        coredump_configured=True,
+        coredump_active_path="/vmfs/volumes/uuid/vmkdump/x.dumpfile",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    coredump_row = rows["Kernel Coredump Configuration"]
+    assert coredump_row.status == "Healthy"
 
 
 def test_virtual_machine_inventory_rows_resolve_datastore_name():

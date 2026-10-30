@@ -37,6 +37,7 @@ _LOG_SIGNAL_RULE_IDS = {
 _SENSOR_RULE_IDS = {"hardware.ipmi_sensor_asserted"}
 _PROCESSOR_RULE_IDS = {"fleet.cpu_model_mismatch"}
 _NTP_RULE_IDS = {"hardware.ntp_not_synchronized"}
+_COREDUMP_RULE_IDS = {"hardware.coredump_not_configured"}
 _STORAGE_HARDWARE_RULE_IDS = _DEVICE_HEALTH_RULE_IDS | _LOG_SIGNAL_RULE_IDS | _SENSOR_RULE_IDS
 
 NOT_ASSESSED = "Not assessed"
@@ -132,6 +133,13 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         else "Host clock/NTP time-synchronization status -- not assessed; no NTP data "
         "found in this bundle"
     )
+    has_coredump_data = any(h.coredump_data_available for h in assessment.hosts)
+    coredump_item = (
+        "Kernel-coredump target configuration (esxcli system coredump file list)"
+        if has_coredump_data
+        else "Kernel-coredump target configuration -- not assessed; no coredump data "
+        "found in this bundle"
+    )
     if vcenter is None:
         return (
             "ESXi host status and diagnostic data availability",
@@ -142,6 +150,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
             "across hosts",
             "Cluster/compute-resource membership, where host-reported in the bundle",
             ntp_item,
+            coredump_item,
             evc_item,
             datastore_item,
             vm_item,
@@ -158,6 +167,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         "Cluster inventory: cluster names and member hosts, as recovered from the "
         "vCenter operational logs in the capture",
         ntp_item,
+        coredump_item,
         evc_item,
         datastore_item,
         vm_item,
@@ -349,6 +359,34 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
         )
     rows.append(ComponentStatus("Time Synchronization (NTP)", ntp_status, ntp_remark))
 
+    hosts_with_coredump_data = [h for h in hosts if h.coredump_data_available]
+    if hosts_with_coredump_data:
+        not_configured = [h for h in hosts_with_coredump_data if h.coredump_configured is False]
+        coredump_findings = _by_ids(findings, _COREDUMP_RULE_IDS)
+        coredump_status = (
+            _status_label(_worst_severity(coredump_findings)) if coredump_findings else "Healthy"
+        )
+        if not_configured:
+            coredump_remark = (
+                f"{len(not_configured)} of {len(hosts_with_coredump_data)} host(s) with "
+                "coredump data have no active/configured coredump target: "
+                f"{', '.join(h.hostname for h in not_configured)}."
+            )
+        else:
+            coredump_remark = (
+                f"All {len(hosts_with_coredump_data)} of {total} host(s) with coredump "
+                "data have an active, configured kernel-coredump target."
+            )
+    else:
+        coredump_status = NOT_ASSESSED
+        coredump_remark = (
+            "Kernel-coredump target configuration -- not assessed; no coredump data "
+            "(esxcli system coredump file list) found in this bundle."
+        )
+    rows.append(
+        ComponentStatus("Kernel Coredump Configuration", coredump_status, coredump_remark)
+    )
+
     storage_hw_findings = _by_ids(findings, _STORAGE_HARDWARE_RULE_IDS)
     rows.append(
         ComponentStatus(
@@ -482,6 +520,10 @@ def key_findings_at_a_glance(assessment: Assessment) -> list[str]:
     ntp_row = next(r for r in rows if r.component == "Time Synchronization (NTP)")
     if ntp_row.status != NOT_ASSESSED:
         items.append(ntp_row.remarks)
+
+    coredump_row = next(r for r in rows if r.component == "Kernel Coredump Configuration")
+    if coredump_row.status != NOT_ASSESSED:
+        items.append(coredump_row.remarks)
 
     evc_row = next(r for r in rows if r.component == "EVC Mode")
     if evc_row.status != NOT_ASSESSED:
@@ -644,6 +686,14 @@ def detailed_observations(assessment: Assessment) -> list[str]:
             "their clock as synchronized."
         )
 
+    coredump_hosts = [h for h in hosts if h.coredump_data_available]
+    if coredump_hosts:
+        not_configured = sum(1 for h in coredump_hosts if h.coredump_configured is False)
+        items.append(
+            f"{len(coredump_hosts) - not_configured} of {len(coredump_hosts)} host(s) with "
+            "coredump data have an active, configured kernel-coredump target."
+        )
+
     return items
 
 
@@ -664,6 +714,7 @@ _CATEGORY_BY_RULE_ID = {
     "hardware.ipmi_sensor_asserted": "Hardware / SEL",
     "fleet.cpu_model_mismatch": "CPU",
     "hardware.ntp_not_synchronized": "Other",
+    "hardware.coredump_not_configured": "Other",
     "coverage.limited_diagnostic_data": "Other",
     "vcenter.core_service_stopped": "vCenter",
     "vcenter.optional_service_stopped": "vCenter",

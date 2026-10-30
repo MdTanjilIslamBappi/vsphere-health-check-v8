@@ -89,6 +89,7 @@ def build_host_dir(
     vm_names: list[str] | None = None,
     vm_no_evc_masks: bool = False,
     ntp_time_synchronized: bool | None = None,
+    coredump_configured: bool | None = None,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -112,6 +113,11 @@ def build_host_dir(
     ``esxcli system ntp get`` JSON dump reporting that sync state against
     a synthetic configured server; left as ``None``, no NTP data is
     written at all (NTP not assessed).
+
+    ``coredump_configured``, if given (True or False), adds an
+    ``esxcli system coredump file list`` dump with a single row whose
+    Active/Configured flags match; left as ``None``, no coredump data is
+    written at all (coredump not assessed).
     """
     bundle_dir = root / f"esx-{hostname}-2026-01-15"
     (bundle_dir / "commands").mkdir(parents=True)
@@ -285,6 +291,20 @@ def build_host_dir(
             / "commands"
             / "localcli_--formatterjson-system-ntp-get.txt"
         ).write_text(json.dumps(ntp_dump), encoding="utf-8")
+
+    if coredump_configured is not None:
+        flag = "true" if coredump_configured else "false"
+        gap = "  "
+        header = f"Path{' ' * 56}{gap}Active{gap}Configured{gap}Size"
+        sep = f"{'-' * 60}{gap}{'-' * 6}{gap}{'-' * 10}{gap}{'-' * 4}"
+        data_path = "/vmfs/volumes/synthetic-uuid/vmkdump/synthetic.dumpfile".ljust(60)
+        data_row = f"{data_path}{gap}{flag.ljust(6)}{gap}{flag.ljust(10)}{gap}1048576"
+        coredump_dump = f"{header}\n{sep}\n{data_row}\n"
+        (
+            bundle_dir
+            / "commands"
+            / "localcli_system-coredump-file-list.txt"
+        ).write_text(coredump_dump, encoding="utf-8")
 
     return bundle_dir
 

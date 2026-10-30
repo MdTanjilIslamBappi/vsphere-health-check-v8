@@ -4,6 +4,7 @@ from vhealth.models.findings import Finding
 from vhealth.models.host import HostInfo
 from vhealth.models.vcenter import VCenterInfo
 from vhealth.rules import (
+    coredump_rules,
     coverage_rules,
     fleet_rules,
     log_rules,
@@ -14,7 +15,7 @@ from vhealth.rules import (
 )
 from vhealth.rules.base import FleetRule, Rule
 
-RULE_ENGINE_VERSION = "1.4.0"
+RULE_ENGINE_VERSION = "1.5.0"
 
 ALL_RULES: list[Rule] = [
     *storage_rules.RULES,
@@ -22,6 +23,7 @@ ALL_RULES: list[Rule] = [
     *log_rules.RULES,
     *coverage_rules.RULES,
     *ntp_rules.RULES,
+    *coredump_rules.RULES,
 ]
 
 ALL_FLEET_RULES: list[FleetRule] = [

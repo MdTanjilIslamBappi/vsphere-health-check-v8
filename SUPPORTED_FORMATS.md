@@ -55,6 +55,7 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
 | `commands/esxcfg-vmknic_-l.txt` | `hardware_inventory.py` | Management IP (the `vmk0` VMkernel NIC, by convention -- see below) |
 | `commands/clusterAdmin_cluster-status.txt` | `hardware_inventory.py` | Host-reported cluster/compute-resource ID and local alarm state, where the file is present |
 | `commands/localcli_--formatterjson-system-ntp-get.txt` | `ntp.py` | NTP enabled/configured-server state and, separately, whether the host's clock is actually synchronized right now |
+| `commands/localcli_system-coredump-file-list.txt` | `coredump.py` | Whether a file-based kernel-coredump target is both active and configured |
 
 ## Known gaps (not yet implemented)
 

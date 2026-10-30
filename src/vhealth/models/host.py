@@ -111,6 +111,13 @@ class HostInfo(BaseModel):
     ntp_enabled: bool | None = None
     ntp_time_synchronized: bool | None = None
     ntp_servers: list[str] = Field(default_factory=list)
+    # Kernel-coredump target configuration (esxcli system coredump file
+    # list). ``coredump_configured`` is True only when at least one listed
+    # dump file is marked both Active and Configured -- without one, a
+    # PSOD on this host leaves no kernel crash dump to root-cause it.
+    coredump_data_available: bool = False
+    coredump_configured: bool | None = None
+    coredump_active_path: str | None = None
     sensors: list[HardwareSensor] = Field(default_factory=list)
     log_events: list[str] = Field(default_factory=list)
     log_signal_counts: dict[str, int] = Field(default_factory=dict)

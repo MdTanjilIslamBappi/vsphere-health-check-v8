@@ -113,6 +113,20 @@ def test_ntp_synchronized_raises_no_finding(tmp_path):
     assert "hardware.ntp_not_synchronized" not in rule_ids
 
 
+def test_coredump_not_configured_raises_finding(tmp_path):
+    host = _assessed_host(tmp_path, coredump_configured=False)
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "hardware.coredump_not_configured" in rule_ids
+
+
+def test_coredump_configured_raises_no_finding(tmp_path):
+    host = _assessed_host(tmp_path, coredump_configured=True)
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "hardware.coredump_not_configured" not in rule_ids
+
+
 def test_fleet_disabled_rules_are_excluded():
     host_a = HostInfo(hostname="host-a", bundle_source="a", cpu_model="Intel Xeon Gold 6258R")
     host_b = HostInfo(hostname="host-b", bundle_source="b", cpu_model="Intel Xeon Gold 6430")
