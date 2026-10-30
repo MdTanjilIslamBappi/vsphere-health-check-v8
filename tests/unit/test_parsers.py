@@ -75,6 +75,7 @@ def test_sensors_parser_classifies_deasserted_state(tmp_path):
 
 def test_vmk_log_parser_counts_pdl_signal(tmp_path):
     host_dir, host = _build_host(tmp_path, include_pdl_warning=True)
+    readme.parse(host_dir, host)  # sets host.captured_on, which the quarterly cutoff needs
     warnings = vmk_log.parse(host_dir, host)
     assert warnings == []
     assert host.log_signal_counts.get("pdl_error", 0) == 1
@@ -85,6 +86,29 @@ def test_vmk_log_parser_no_pdl_signal_when_absent(tmp_path):
     host_dir, host = _build_host(tmp_path, include_pdl_warning=False)
     vmk_log.parse(host_dir, host)
     assert host.log_signal_counts.get("pdl_error", 0) == 0
+
+
+def test_vmk_log_parser_excludes_events_older_than_one_quarter(tmp_path):
+    host_dir, host = _build_host(tmp_path, include_old_pdl_warning=True)
+    from vhealth.parsers import readme
+
+    readme.parse(host_dir, host)  # sets host.captured_on, which the cutoff is computed from
+    warnings = vmk_log.parse(host_dir, host)
+    assert warnings == []
+    assert host.log_signal_counts.get("pdl_error", 0) == 0
+    assert host.log_signal_counts_excluded.get("pdl_error", 0) == 1
+
+
+def test_vmk_log_parser_includes_recent_and_excludes_old_together(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path, include_pdl_warning=True, include_old_pdl_warning=True
+    )
+    from vhealth.parsers import readme
+
+    readme.parse(host_dir, host)
+    vmk_log.parse(host_dir, host)
+    assert host.log_signal_counts.get("pdl_error", 0) == 1
+    assert host.log_signal_counts_excluded.get("pdl_error", 0) == 1
 
 
 def test_parsers_report_warnings_when_evidence_missing(tmp_path):

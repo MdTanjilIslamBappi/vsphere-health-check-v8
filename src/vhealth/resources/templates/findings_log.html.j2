@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ config.report.title }} — Detailed Findings Log</title>
+<style>
+  :root {
+    --sev-critical: #b30000; --sev-high: #d9534f; --sev-medium: #c77c00;
+    --sev-low: #5b8def; --sev-info: #6c757d;
+  }
+  body { font-family: -apple-system, Segoe UI, Arial, sans-serif; margin: 0; color: #1a1a1a; }
+  header { background: #2d2d2d; color: #fff; padding: 1.5rem 2rem; }
+  header h1 { margin: 0 0 0.25rem; font-size: 1.3rem; }
+  header .meta { opacity: 0.8; font-size: 0.85rem; }
+  main { max-width: 960px; margin: 0 auto; padding: 1.5rem 2rem 3rem; }
+  .badge { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 1rem; color: #fff;
+           font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+  .badge.critical { background: var(--sev-critical); }
+  .badge.high { background: var(--sev-high); }
+  .badge.medium { background: var(--sev-medium); }
+  .badge.low { background: var(--sev-low); }
+  .badge.info { background: var(--sev-info); }
+  .finding { border: 1px solid #ddd; border-radius: 6px; padding: 1rem; margin-bottom: 0.75rem; }
+  .finding h3 { margin: 0.2rem 0; }
+  .evidence { background: #f8f9fa; border-left: 3px solid #999; padding: 0.5rem 0.75rem;
+              font-family: Consolas, monospace; font-size: 0.8rem; margin-top: 0.5rem; white-space: pre-wrap; }
+  .muted { color: #666; font-size: 0.85rem; }
+  footer { text-align: center; color: #888; font-size: 0.8rem; padding: 1.5rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{ config.report.title }} &mdash; Detailed Findings Log</h1>
+  <div class="meta">Companion to the main report generated {{ assessment.metadata.assessment_timestamp }}</div>
+  <div class="meta">Input: {{ assessment.metadata.input_filename }} (sha256 {{ assessment.metadata.input_sha256[:16] }}&hellip;)</div>
+  <div class="meta">Assessment schema {{ assessment.metadata.schema_version }} &middot;
+     vhealth {{ assessment.metadata.app_version }} &middot;
+     rule engine {{ assessment.metadata.rule_engine_version }}</div>
+</header>
+<main>
+  {% for f in findings %}
+  <div class="finding">
+    <span class="badge {{ f.severity.value }}">{{ f.severity.value }}</span>
+    <h3>{{ f.title }}</h3>
+    <p class="muted">{{ f.rule_id }}{% if f.affected_host %} &middot; {{ f.affected_host }}{% endif %}
+       {% if f.affected_object %} &middot; {{ f.affected_object }}{% endif %}</p>
+    <p>{{ f.summary }}</p>
+    {% if f.remediation %}<p><strong>Remediation:</strong> {{ f.remediation }}</p>{% endif %}
+    {% if f.limitations %}<p class="muted"><strong>Limitations:</strong> {{ f.limitations }}</p>{% endif %}
+    {% if f.evidence %}<div class="evidence">{{ f.evidence|join("\n") }}</div>{% endif %}
+  </div>
+  {% else %}
+  <p>No findings were raised by the checks that could run for this bundle.</p>
+  {% endfor %}
+
+  {% if assessment.metadata.processing_warnings %}
+  <h2>Processing Warnings</h2>
+  <ul class="muted">
+    {% for w in assessment.metadata.processing_warnings %}<li>{{ w.source }}: {{ w.message }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</main>
+<footer>
+  Generated offline by vhealth {{ assessment.metadata.app_version }}. No data from this bundle was
+  transmitted anywhere.
+</footer>
+</body>
+</html>

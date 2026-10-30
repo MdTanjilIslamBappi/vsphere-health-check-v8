@@ -20,8 +20,10 @@ def _metadata(**overrides) -> AssessmentMetadata:
 def test_component_status_rows_marks_unassessed_vcenter_sections():
     assessment = Assessment(metadata=_metadata(), hosts=[], findings=[])
     rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["vCenter Server"].status == summary.NOT_ASSESSED
     assert rows["EVC Mode"].status == summary.NOT_ASSESSED
-    assert rows["vCenter Active Alarms / VM Resource Alerts"].status == summary.NOT_ASSESSED
+    assert rows["Datastores"].status == summary.NOT_ASSESSED
+    assert rows["Virtual Machines"].status == summary.NOT_ASSESSED
 
 
 def test_component_status_rows_flags_attention_for_high_severity_finding():
@@ -35,8 +37,8 @@ def test_component_status_rows_flags_attention_for_high_severity_finding():
     )
     assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
     rows = {row.component: row for row in summary.component_status_rows(assessment)}
-    assert rows["Storage Devices & SMART Health"].status == "Attention Needed"
-    assert rows["Overall (from checks performed)"].status == "Attention Needed"
+    assert rows["Storage & Hardware Findings"].status == "Attention Needed"
+    assert rows["Overall"].status == "Attention Needed"
 
 
 def test_host_inventory_rows_use_unknown_for_missing_fields():
@@ -86,3 +88,21 @@ def test_executive_summary_text_reports_no_findings_honestly():
     assessment = Assessment(metadata=_metadata(), hosts=[], findings=[])
     text = summary.executive_summary_text(assessment)
     assert "No findings were raised" in text
+
+
+def test_key_findings_at_a_glance_notes_not_assessed_items():
+    assessment = Assessment(metadata=_metadata(), hosts=[], findings=[])
+    items = summary.key_findings_at_a_glance(assessment)
+    assert any("not assessed" in item for item in items)
+
+
+def test_hardware_status_grid_marks_management_connection_not_assessed():
+    assessment = Assessment(metadata=_metadata(), hosts=[], findings=[])
+    grid = summary.hardware_status_grid(assessment)
+    assert grid.management_connection == summary.NOT_ASSESSED
+
+
+def test_detailed_observations_mentions_quarterly_window():
+    assessment = Assessment(metadata=_metadata(), hosts=[], findings=[])
+    items = summary.detailed_observations(assessment)
+    assert any("90 days" in item for item in items)

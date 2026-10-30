@@ -66,6 +66,7 @@ class HostInfo(BaseModel):
     sensors: list[HardwareSensor] = Field(default_factory=list)
     log_events: list[str] = Field(default_factory=list)
     log_signal_counts: dict[str, int] = Field(default_factory=dict)
+    log_signal_counts_excluded: dict[str, int] = Field(default_factory=dict)
     log_data_available: bool = False
     server_manufacturer: str | None = None
     server_model: str | None = None

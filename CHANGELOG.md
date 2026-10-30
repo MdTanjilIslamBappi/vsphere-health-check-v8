@@ -11,20 +11,45 @@ there too -- but this is not a bare-metal/Ubuntu test, and the PyInstaller
 build is still Windows-only (see [SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md)
 and the "Known limitations" section of [README.md](README.md)).
 
+### Changed
+
+- Report convention rework based on direct user feedback on the first
+  redesign: the main report now mirrors a customer-facing executive
+  health-check convention exactly (Executive Summary, Scope, System
+  Status 3.1-3.4 ending in Recommendation -- no more), written in report
+  voice ("This quarterly health check assessment was performed on the
+  customer's...") instead of tool/software voice. The full per-finding
+  evidence dump that used to live inline in the main report now lives in
+  a separate companion document instead (`findings-log.docx`/
+  `findings-log.html`, written automatically alongside `report.docx`/
+  `report.html`), so the main report stays a concise executive read.
+- Log-based findings (PDL/APD/dead-path/ALUA/VOB) are now scoped to the
+  last 90 days of the bundle's own capture date -- this is a *quarterly*
+  health check, so an event from a year-old log rotation no longer
+  appears as an active finding. Older matches are still tallied
+  (`HostInfo.log_signal_counts_excluded`) rather than discarded, and a
+  finding's limitations note how many older occurrences exist outside
+  the window, but they do not drive severity or an active finding.
+
 ### Added
 
 - New default HTML/DOCX report layout: cover page, a Version History table
   (`--revision`/`--description` options, default `V01`/"Initial copy"), a
-  table of contents, an aggregate "Current Hardware Status" pass/fail
-  table, a "Current State Analysis of VMware Components" status table
-  (Component/Status/Remarks), and a "Current State Analysis of ESXi Hosts"
-  inventory table (Server Name/Management IP/Server Model/CPU Model). A
-  new "3.5 Not Assessed From This Bundle" section explicitly lists what
-  this tool cannot check from an ESXi `vm-support` bundle (EVC mode,
-  vSphere HA/DRS config, vCenter alarms, VM-level utilization) instead of
-  silently omitting it, and "3.6 Recommendation" groups findings by rule
-  with an Affected/Action layout. See RULE_CATALOG.md and
+  table of contents, Executive Summary, Scope of Health Check (a single
+  checked/not-checked bullet list -- EVC mode, datastores, VM inventory,
+  and vCenter alarms are listed as explicitly not assessed rather than
+  guessed or silently omitted, since an ESXi host bundle has no vCenter
+  data), and System Status: 3.1 an aggregate Hardware Status grid, 3.2 a
+  VMware Components status table (Component/Status/Remarks) plus a "Key
+  Findings at a Glance" bullet list, 3.3 an ESXi host inventory table
+  (Server Name/Management IP/Server Model/CPU Model) plus a "Detailed
+  Observations" bullet list, and 3.4 Recommendation grouping findings by
+  rule with an Affected/Action layout. See RULE_CATALOG.md and
   SUPPORTED_FORMATS.md.
+- `findings-log.docx`/`findings-log.html`: a companion document, written
+  automatically alongside every `report.docx`/`report.html`, carrying the
+  full per-finding detail (evidence lines, remediation, limitations) that
+  used to live inline in the main report.
 - `hardware_inventory.py` parser: server manufacturer/model and CPU model
   (from `commands/smbiosDump.txt`), management IP (`vmk0` from
   `commands/esxcfg-vmknic_-l.txt`), and host-reported cluster/compute-resource

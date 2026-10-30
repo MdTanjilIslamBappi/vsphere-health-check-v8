@@ -41,6 +41,19 @@ def test_pdl_log_signal_raises_critical_finding(tmp_path):
     assert pdl_findings[0].severity.value == "critical"
 
 
+def test_old_pdl_warning_outside_quarter_raises_no_finding(tmp_path):
+    host = _assessed_host(tmp_path, include_old_pdl_warning=True)
+    findings = evaluate_all([host])
+    assert "storage.pdl_detected" not in {f.rule_id for f in findings}
+
+
+def test_recent_pdl_finding_notes_excluded_older_occurrences(tmp_path):
+    host = _assessed_host(tmp_path, include_pdl_warning=True, include_old_pdl_warning=True)
+    findings = evaluate_all([host])
+    pdl_finding = next(f for f in findings if f.rule_id == "storage.pdl_detected")
+    assert "1 additional older occurrence" in pdl_finding.limitations
+
+
 def test_findings_carry_remediation_and_limitations(tmp_path):
     host = _assessed_host(tmp_path, smart_health="FAILED")
     findings = evaluate_all([host])

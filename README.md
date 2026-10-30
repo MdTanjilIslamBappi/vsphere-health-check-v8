@@ -107,15 +107,27 @@ re-running the assessment.
 
 ### Report layout
 
-Every HTML/DOCX report has the same structure: a cover page, a Version
-History table, a table of contents, an Executive Summary, Scope of Health
-Check, and a System Status section with an aggregate hardware-status
-table, a VMware-components status table, an ESXi host inventory table
-(server model/CPU model/management IP), detailed findings, an explicit
-"Not Assessed From This Bundle" section (EVC mode, vSphere HA/DRS,
-vCenter alarms, VM-level state -- none of which an ESXi `vm-support`
-bundle contains), and grouped recommendations. See RULE_CATALOG.md and
-SUPPORTED_FORMATS.md for exactly what backs each section.
+Every HTML/DOCX report has the same structure, written as a customer-facing
+health check: a cover page, a Version History table, a table of contents,
+an Executive Summary, a Scope of Health Check (a single bullet list --
+items that need vCenter-level data, such as EVC mode, datastores, VM
+inventory, or vCenter alarms, are listed as explicitly not assessed rather
+than guessed or silently dropped), and a System Status section: 3.1 an
+aggregate hardware-status grid, 3.2 a VMware-components status table plus
+"Key Findings at a Glance", 3.3 an ESXi host inventory table (server
+model/CPU model/management IP) plus "Detailed Observations", and 3.4
+grouped Recommendations. See RULE_CATALOG.md and SUPPORTED_FORMATS.md for
+exactly what backs each section.
+
+Every `assess`/`report` run that generates `docx` or `html` also writes a
+companion `findings-log.docx`/`findings-log.html` with the full
+per-finding detail (evidence lines, remediation, limitations) -- the main
+report stays a concise executive read, and nothing is lost.
+
+Log-based findings (PDL/APD/dead-path/ALUA/VOB from `vmkwarning`/`vobd`)
+are scoped to the last 90 days of the bundle's own capture date, since
+this is meant as a quarterly health check; older matches are still
+counted (not discarded) but don't drive an active finding.
 
 ## How it works
 

@@ -12,20 +12,33 @@ Only a bounded number of representative example lines per signal are kept
 (``_MAX_EXAMPLES_PER_SIGNAL``) so the assessment output stays a reasonable
 size for a host with a long, noisy log history; the full occurrence count
 is still recorded.
+
+**Quarterly scope.** A retained log rotation can span well over a year on
+a quiet host. This assessment is a point-in-time *quarterly* health check,
+so only log lines timestamped within the last ``_LOG_WINDOW_DAYS`` (90)
+days of the bundle's own capture date count toward findings in
+``log_signal_counts`` -- older matches are tallied separately in
+``log_signal_counts_excluded`` rather than discarded outright, so nothing
+is silently lost, but they do not drive an active finding in a report
+scoped to this quarter. A line with no parseable leading timestamp, or a
+bundle with no parseable capture date, is treated as in-window rather than
+guessed away.
 """
 
 from __future__ import annotations
 
 import gzip
 import re
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from vhealth.models.host import HostInfo
 
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 
 _MAX_EXAMPLES_PER_SIGNAL = 5
 _MAX_ROTATIONS = 8
+_LOG_WINDOW_DAYS = 90
 
 _VMKWARNING_SIGNALS: dict[str, re.Pattern[str]] = {
     "pdl_error": re.compile(r"PDL error|nmp_PathDetermineFailure", re.I),
@@ -40,6 +53,9 @@ _VOBD_SIGNALS: dict[str, re.Pattern[str]] = {
     "vob_storage_problem": re.compile(r"esx\.problem\.(storage|scsi|vmfs|vob\.storage)", re.I),
 }
 
+_LINE_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})T")
+_CAPTURED_ON_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
+
 
 def parse(host_dir: Path, host: HostInfo) -> list[str]:
     warnings: list[str] = []
@@ -47,9 +63,16 @@ def parse(host_dir: Path, host: HostInfo) -> list[str]:
     if not log_dir.is_dir():
         return ["var/run/log not found; log-based signals unavailable"]
 
+    cutoff = _quarterly_cutoff(host.captured_on)
+    if cutoff is None:
+        warnings.append(
+            "Could not determine the bundle's capture date; log signals were not filtered "
+            "to the last 90 days (quarterly scope)."
+        )
+
     found_any_rotation = False
     for stem, signals in (("vmkwarning", _VMKWARNING_SIGNALS), ("vobd", _VOBD_SIGNALS)):
-        matched_rotation = _scan_rotations(log_dir, stem, signals, host)
+        matched_rotation = _scan_rotations(log_dir, stem, signals, host, cutoff)
         found_any_rotation = found_any_rotation or matched_rotation
 
     host.log_data_available = found_any_rotation
@@ -60,11 +83,35 @@ def parse(host_dir: Path, host: HostInfo) -> list[str]:
     return warnings
 
 
+def _quarterly_cutoff(captured_on: str | None) -> date | None:
+    if not captured_on:
+        return None
+    match = _CAPTURED_ON_DATE_RE.match(captured_on)
+    if not match:
+        return None
+    try:
+        captured_date = datetime.strptime(match.group(1), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    return captured_date - timedelta(days=_LOG_WINDOW_DAYS)
+
+
+def _line_date(line: str) -> date | None:
+    match = _LINE_DATE_RE.match(line)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(1), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
 def _scan_rotations(
     log_dir: Path,
     stem: str,
     signals: dict[str, re.Pattern[str]],
     host: HostInfo,
+    cutoff: date | None,
 ) -> bool:
     found_any = False
     for i in range(_MAX_ROTATIONS):
@@ -74,16 +121,24 @@ def _scan_rotations(
             found_any = True
             text = _read_text(candidate)
             for line in text.splitlines():
+                line_date = _line_date(line)
+                in_window = cutoff is None or line_date is None or line_date >= cutoff
                 for signal_name, pattern in signals.items():
-                    if pattern.search(line):
-                        host.log_signal_counts[signal_name] = (
-                            host.log_signal_counts.get(signal_name, 0) + 1
+                    if not pattern.search(line):
+                        continue
+                    if not in_window:
+                        host.log_signal_counts_excluded[signal_name] = (
+                            host.log_signal_counts_excluded.get(signal_name, 0) + 1
                         )
-                        examples = [
-                            e for e in host.log_events if e.startswith(f"[{signal_name}]")
-                        ]
-                        if len(examples) < _MAX_EXAMPLES_PER_SIGNAL:
-                            host.log_events.append(f"[{signal_name}] {line.strip()[:300]}")
+                        continue
+                    host.log_signal_counts[signal_name] = (
+                        host.log_signal_counts.get(signal_name, 0) + 1
+                    )
+                    examples = [
+                        e for e in host.log_events if e.startswith(f"[{signal_name}]")
+                    ]
+                    if len(examples) < _MAX_EXAMPLES_PER_SIGNAL:
+                        host.log_events.append(f"[{signal_name}] {line.strip()[:300]}")
     return found_any
 
 

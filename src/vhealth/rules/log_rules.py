@@ -53,18 +53,26 @@ def _log_signal_findings(host: HostInfo) -> list[Finding]:
         if signal_name == "alua_no_connection" and count < _REPEAT_THRESHOLD:
             continue
         examples = [e for e in host.log_events if e.startswith(f"[{signal_name}]")]
+        excluded = host.log_signal_counts_excluded.get(signal_name, 0)
         findings.append(
             Finding(
                 rule_id=rule_id,
                 title=title,
                 severity=severity,
-                summary=f"{count} matching log line(s) found across retained log rotations.",
+                summary=f"{count} matching log line(s) found in the last 90 days (this quarter).",
                 evidence=examples,
                 affected_host=host.hostname,
                 remediation="Correlate the timestamps with storage array/fabric-side logs.",
                 limitations=(
-                    f"{note} Only the rotations retained in the bundle at capture time "
-                    "were scanned (older events may already have rolled off)."
+                    f"{note} Scoped to this quarter (the last 90 days of the bundle's own "
+                    "capture date); only the rotations retained in the bundle at capture "
+                    "time were scanned (older events may already have rolled off)."
+                    + (
+                        f" {excluded} additional older occurrence(s) were also found in "
+                        "the bundle but fall outside this quarter's window."
+                        if excluded
+                        else ""
+                    )
                 ),
             )
         )

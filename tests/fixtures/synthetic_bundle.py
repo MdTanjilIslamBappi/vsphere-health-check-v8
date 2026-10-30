@@ -76,6 +76,7 @@ def build_host_dir(
     smart_health: str = "OK",
     sensor_asserted: bool = False,
     include_pdl_warning: bool = False,
+    include_old_pdl_warning: bool = False,
     minimal_capture: bool = False,
     server_manufacturer: str = "Synthetic Inc.",
     server_model: str = "SynthServer R1",
@@ -178,6 +179,14 @@ def build_host_dir(
             "2026-01-15T10:05:00.000Z Wa(180) vmkwarning: cpu0:1)WARNING: NMP: "
             "nmp_PathDetermineFailure:3536: Cmd (0x1a) PDL error (0x5/0x25/0x0) - "
             "path vmhba2:C0:T0:L0 device naa.6000000000000000000000000000001\n"
+        )
+    if include_old_pdl_warning:
+        # Captured on 2026-01-15; this is ~1 year earlier, well outside the 90-day
+        # quarterly log window -- it should be tallied as excluded, not as a finding.
+        vmkwarning_lines.append(
+            "2025-01-10T10:05:00.000Z Wa(180) vmkwarning: cpu0:1)WARNING: NMP: "
+            "nmp_PathDetermineFailure:3536: Cmd (0x1a) PDL error (0x5/0x25/0x0) - "
+            "path vmhba2:C0:T0:L1 device naa.6000000000000000000000000000002\n"
         )
     with gzip.open(bundle_dir / "var" / "run" / "log" / "vmkwarning.0.gz", "wb") as f:
         f.write("".join(vmkwarning_lines).encode("utf-8"))

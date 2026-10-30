@@ -165,8 +165,11 @@ This writes, into the `out` folder:
 
 - `assessment.json` — the raw, versioned results (useful for automation
   or diffing two runs; you probably won't read this directly)
-- `report.html` — open this in any web browser
-- `report.docx` — open this in Word (or LibreOffice)
+- `report.html` — a concise executive summary; open this in any web browser
+- `report.docx` — the same report; open this in Word (or LibreOffice)
+- `findings-log.html` / `findings-log.docx` — the full per-finding detail
+  (evidence lines, remediation, limitations) behind the main report, as a
+  separate document so the main report stays a quick read
 
 When it finishes it prints a one-line summary, e.g.:
 
@@ -206,23 +209,25 @@ description, which you can set with `--revision` (default `V01`) and
 
 ## 8. Reading the report
 
-Open `report.html` (or `.docx`) and look for:
+Start with `report.html` (or `.docx`) — it's the concise executive read:
 
-- **Severity**: `critical` and `high` findings deserve attention first;
-  `info`/`low` are usually just things worth being aware of.
-- **Evidence**: the exact log lines or data vhealth based the finding on
-  — so you can verify it yourself rather than taking the tool's word for
-  it.
-- **Limitations**: some findings include a note about what the rule
-  *can't* rule out (e.g. a count-based heuristic that doesn't know about
-  scheduled maintenance). Read these before escalating a finding.
-- **"Not Assessed From This Bundle"** (section 3.5): a short list of
-  things vhealth genuinely cannot check from an ESXi host bundle alone —
-  EVC mode, vSphere HA/DRS configuration, vCenter-level alarms, and VM
-  resource utilization. These require a live vCenter connection or a
-  vCenter-side export, which vhealth never performs. This section is
-  listed explicitly rather than silently skipped, so you know to check
-  these another way if they matter for your review.
+- **Section 2, Scope of Health Check**: a single checklist of what was
+  reviewed. A few items are listed as "not assessed" — EVC mode,
+  datastores, VM inventory, vCenter-level alarms — because those require
+  a live vCenter connection or a vCenter-side export, which vhealth never
+  performs. They're listed explicitly rather than silently skipped, so
+  you know to check them another way if they matter for your review.
+- **Section 3.2/3.3**: "Key Findings at a Glance" and "Detailed
+  Observations" are the fastest way to see what matters without reading
+  every finding.
+- **Section 3.4, Recommendation**: each item shows which hosts are
+  affected and what action to take.
+
+For the full evidence behind every item — exact log lines, per-finding
+limitations, severity — open the companion `findings-log.html`/`.docx`.
+That's also where to check a finding's **limitations** (what the rule
+*can't* rule out, e.g. a count-based heuristic that doesn't know about
+scheduled maintenance) before escalating it.
 
 A few VMware terms you may see in findings:
 

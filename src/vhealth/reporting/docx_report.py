@@ -15,15 +15,7 @@ from vhealth.models.findings import Severity
 from vhealth.reporting import summary
 from vhealth.reporting.authorship import ReportAuthorship
 
-VERSION = "2.0.0"
-
-_SEVERITY_COLOR = {
-    Severity.CRITICAL: RGBColor(0xB3, 0x00, 0x00),
-    Severity.HIGH: RGBColor(0xD9, 0x53, 0x4F),
-    Severity.MEDIUM: RGBColor(0xC7, 0x7C, 0x00),
-    Severity.LOW: RGBColor(0x5B, 0x8D, 0xEF),
-    Severity.INFO: RGBColor(0x6C, 0x75, 0x7D),
-}
+VERSION = "3.0.0"
 
 _STATUS_COLOR = {
     "Healthy": RGBColor(0x1E, 0x7E, 0x34),
@@ -62,22 +54,29 @@ def write_docx_report(
     doc.add_heading("3. System Status", level=1)
 
     doc.add_heading("3.1 Current Hardware Status", level=2)
-    _add_hardware_status_table(doc, assessment)
+    _add_hardware_status_grid(doc, assessment)
 
     doc.add_heading("3.2 Current State Analysis of VMware Components", level=2)
     _add_component_status_table(doc, assessment)
+    doc.add_paragraph("Key Findings at a Glance").runs[0].bold = True
+    for item in summary.key_findings_at_a_glance(assessment):
+        doc.add_paragraph(item, style="List Bullet")
 
     doc.add_heading("3.3 Current State Analysis of ESXi Hosts", level=2)
     _add_host_inventory_table(doc, assessment)
+    doc.add_paragraph("Detailed Observations").runs[0].bold = True
+    for item in summary.detailed_observations(assessment):
+        doc.add_paragraph(item, style="List Bullet")
 
-    doc.add_heading("3.4 Detailed Findings", level=2)
-    _add_findings(doc, assessment)
-
-    doc.add_heading("3.5 Not Assessed From This Bundle", level=2)
-    _add_not_assessed_section(doc, assessment)
-
-    doc.add_heading("3.6 Recommendation", level=2)
+    doc.add_heading("3.4 Recommendation", level=2)
     _add_recommendations(doc, assessment)
+
+    doc.add_paragraph()
+    note = doc.add_paragraph()
+    note.add_run(
+        "A separate detailed findings log accompanies this report, with the full "
+        "evidence-level breakdown behind every item above."
+    ).italic = True
 
     doc.save(str(output_path))
 
@@ -98,13 +97,7 @@ def _add_title_page(
 
     meta = doc.add_paragraph()
     meta.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    meta.add_run(
-        f"Generated {assessment.metadata.assessment_timestamp}\n"
-        f"vhealth {assessment.metadata.app_version} · "
-        f"rule engine {assessment.metadata.rule_engine_version}\n"
-        f"Input: {assessment.metadata.input_filename}\n"
-        f"SHA-256: {assessment.metadata.input_sha256}"
-    ).font.size = Pt(10)
+    meta.add_run(f"Generated {assessment.metadata.assessment_timestamp}").font.size = Pt(10)
 
     if not authorship.is_empty:
         table = doc.add_table(rows=0, cols=2)
@@ -175,37 +168,29 @@ def _add_severity_counts(doc: Document, assessment: Assessment) -> None:
 
 
 def _add_scope(doc: Document, assessment: Assessment) -> None:
+    doc.add_paragraph("The following was reviewed during this health check assessment:")
+    for item in summary.SCOPE_ITEMS:
+        doc.add_paragraph(item, style="List Bullet")
+
     doc.add_paragraph(
-        "This report was produced entirely offline from the customer-supplied diagnostic "
-        "bundle below; no connection was made to any vCenter Server, ESXi host, or external "
-        "service, and no customer data leaves this workstation."
+        "This assessment was performed entirely offline against the customer-supplied "
+        "diagnostic bundle below; no connection was made to vCenter or any ESXi host."
     )
     table = doc.add_table(rows=0, cols=2)
     table.style = "Light List Accent 1"
     for label, value in [
         ("Input file", assessment.metadata.input_filename),
-        ("SHA-256", assessment.metadata.input_sha256),
-        ("Hosts discovered", str(len(assessment.hosts))),
-        ("Assessment schema", assessment.metadata.schema_version),
+        ("Hosts assessed", str(len(assessment.hosts))),
     ]:
         cells = table.add_row().cells
         cells[0].text = label
         cells[1].text = value
 
-    doc.add_paragraph("Checked by this assessment:").runs[0].bold = True
-    for item in summary.SCOPE_CHECKED:
-        doc.add_paragraph(item, style="List Bullet")
-
-    doc.add_paragraph("Not checked by this assessment (see Section 3.5):").runs[0].bold = True
-    for item in summary.SCOPE_NOT_ASSESSED:
-        doc.add_paragraph(item, style="List Bullet")
-
     if assessment.metadata.processing_warnings:
         doc.add_paragraph(
-            f"Processing warnings ({len(assessment.metadata.processing_warnings)}):"
+            "Some processing warnings were recorded during this assessment; see the "
+            "detailed findings log for the full list."
         ).runs[0].italic = True
-        for w in assessment.metadata.processing_warnings:
-            doc.add_paragraph(f"{w.source}: {w.message}", style="List Bullet")
 
 
 def _status_cell(cells, index: int, status: str) -> None:
@@ -217,20 +202,25 @@ def _status_cell(cells, index: int, status: str) -> None:
         run.font.color.rgb = color
 
 
-def _add_hardware_status_table(doc: Document, assessment: Assessment) -> None:
-    table = doc.add_table(rows=1, cols=2)
+def _add_hardware_status_grid(doc: Document, assessment: Assessment) -> None:
+    grid = summary.hardware_status_grid(assessment)
+    table = doc.add_table(rows=3, cols=4)
     table.style = "Light Grid Accent 1"
-    table.rows[0].cells[0].text = "Category"
-    table.rows[0].cells[1].text = "Status"
-    for row_data in summary.hardware_status_rows(assessment):
-        cells = table.add_row().cells
-        cells[0].text = row_data.label
-        _status_cell(cells, 1, row_data.status)
-    doc.add_paragraph(
-        "Derived from the storage, SMART, and IPMI sensor findings in this assessment. "
-        "\"Management Connection Status\" requires live vCenter/ESXi connectivity and is "
-        "not assessed from a static bundle."
-    )
+
+    table.rows[0].cells[0].text = "HW / Disk"
+    _status_cell(table.rows[0].cells, 1, grid.hw_disk)
+    table.rows[0].cells[2].text = "Management Connection Status"
+    _status_cell(table.rows[0].cells, 3, grid.management_connection)
+
+    table.rows[1].cells[0].text = "Health"
+    _status_cell(table.rows[1].cells, 1, grid.health)
+    table.rows[1].cells[2].text = "Power"
+    _status_cell(table.rows[1].cells, 3, grid.power)
+
+    table.rows[2].cells[0].text = "Observations"
+    obs_cell = table.rows[2].cells[1]
+    obs_cell.merge(table.rows[2].cells[3])
+    obs_cell.text = grid.observations
 
 
 def _add_component_status_table(doc: Document, assessment: Assessment) -> None:
@@ -260,62 +250,6 @@ def _add_host_inventory_table(doc: Document, assessment: Assessment) -> None:
         cells[4].text = row_data.cpu_model
 
 
-def _add_findings(doc: Document, assessment: Assessment) -> None:
-    findings = sorted(assessment.findings, key=lambda f: -f.severity.rank)
-    if not findings:
-        doc.add_paragraph("No findings were raised by the rule catalogue for this bundle.")
-        return
-    for finding in findings:
-        heading = doc.add_paragraph()
-        run = heading.add_run(f"[{finding.severity.value.upper()}] {finding.title}")
-        run.bold = True
-        run.font.color.rgb = _SEVERITY_COLOR[finding.severity]
-
-        meta = f"{finding.rule_id}"
-        if finding.affected_host:
-            meta += f" · {finding.affected_host}"
-        if finding.affected_object:
-            meta += f" · {finding.affected_object}"
-        meta_p = doc.add_paragraph()
-        meta_p.add_run(meta).italic = True
-
-        doc.add_paragraph(finding.summary)
-        if finding.remediation:
-            p = doc.add_paragraph()
-            p.add_run("Remediation: ").bold = True
-            p.add_run(finding.remediation)
-        if finding.limitations:
-            p = doc.add_paragraph()
-            p.add_run("Limitations: ").bold = True
-            p.add_run(finding.limitations)
-        for line in finding.evidence:
-            doc.add_paragraph(line, style="Intense Quote")
-
-
-def _add_not_assessed_section(doc: Document, assessment: Assessment) -> None:
-    doc.add_paragraph(
-        "The items below require data this tool cannot get from an ESXi vm-support bundle "
-        "(EVC/cluster configuration, vCenter alarms, VM-level state) -- they need a live "
-        "vCenter connection or a vCenter-side export instead. They are listed here, rather "
-        "than omitted, so a reviewer can see exactly what still needs checking manually, or "
-        "strike any that don't apply."
-    )
-    for item in summary.SCOPE_NOT_ASSESSED:
-        doc.add_paragraph(item, style="List Bullet")
-
-    cluster_hosts = [h for h in assessment.hosts if h.cluster_id]
-    if cluster_hosts:
-        doc.add_paragraph(
-            "One real, host-reported data point that is adjacent to this: the following "
-            "hosts locally report membership in a vCenter compute resource / cluster "
-            "(this is not EVC or HA configuration, just a cluster ID each host's own agent "
-            "knows about):"
-        )
-        for host in cluster_hosts:
-            alarm = " (local agent reports an alarm)" if host.cluster_in_alarm else ""
-            doc.add_paragraph(f"{host.hostname}: {host.cluster_id}{alarm}", style="List Bullet")
-
-
 def _add_recommendations(doc: Document, assessment: Assessment) -> None:
     groups = summary.recommendation_groups(assessment)
     if not groups:
@@ -323,9 +257,12 @@ def _add_recommendations(doc: Document, assessment: Assessment) -> None:
         return
     for group in groups:
         heading = doc.add_paragraph()
-        run = heading.add_run(f"[{group.severity.upper()}] {group.title}")
+        run = heading.add_run(group.title)
         run.bold = True
-        run.font.color.rgb = _SEVERITY_COLOR[Severity(group.severity)]
+
+        p = doc.add_paragraph()
+        p.add_run("Severity: ").bold = True
+        p.add_run(group.severity.upper())
 
         p = doc.add_paragraph()
         p.add_run("Affected: ").bold = True
@@ -334,8 +271,3 @@ def _add_recommendations(doc: Document, assessment: Assessment) -> None:
         p = doc.add_paragraph()
         p.add_run("Action: ").bold = True
         p.add_run(group.action)
-
-        if group.limitations:
-            p = doc.add_paragraph()
-            p.add_run("Limitations: ").bold = True
-            p.add_run(group.limitations)

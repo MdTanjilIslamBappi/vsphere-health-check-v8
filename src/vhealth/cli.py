@@ -14,7 +14,13 @@ from vhealth.ingestion import extract_bundle
 from vhealth.ingestion.exceptions import VHealthError
 from vhealth.models.assessment import Assessment
 from vhealth.pipeline import run_assessment
-from vhealth.reporting import ReportAuthorship, write_docx_report, write_html_report
+from vhealth.reporting import (
+    ReportAuthorship,
+    write_docx_findings_log,
+    write_docx_report,
+    write_html_findings_log,
+    write_html_report,
+)
 
 EXIT_OK = 0
 EXIT_INPUT_ERROR = 2
@@ -303,10 +309,16 @@ def _generate_reports(
         html_path = output_dir / "report.html"
         write_html_report(assessment, config, html_path, authorship)
         click.echo(f"Wrote {html_path}")
+        findings_log_path = output_dir / "findings-log.html"
+        write_html_findings_log(assessment, config, findings_log_path, authorship)
+        click.echo(f"Wrote {findings_log_path}")
     if "docx" in requested:
         docx_path = output_dir / "report.docx"
         write_docx_report(assessment, config, docx_path, authorship)
         click.echo(f"Wrote {docx_path}")
+        findings_log_path = output_dir / "findings-log.docx"
+        write_docx_findings_log(assessment, config, findings_log_path, authorship)
+        click.echo(f"Wrote {findings_log_path}")
 
 
 if __name__ == "__main__":
