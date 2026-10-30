@@ -213,6 +213,27 @@ and the "Known limitations" section of [README.md](README.md)).
   critical-temperature events on other hosts, confirming the message
   matching end to end even though only the drive-predictive-failure
   signal is young enough to raise an active finding in this bundle.
+- `network.vswitch_uplink_link_down` and `network.vswitch_all_uplinks_down`
+  rules and `nic_link.py` parser: read each ESXi host's own physical NIC
+  link state (`nicinfo.sh`) and cross-reference it against the uplink
+  NICs each vSwitch/DVS reports in `esxcfg-vswitch -l`. The existing
+  `network.vswitch_single_uplink` rule only counts how many uplinks are
+  *configured*; it cannot see that one of two configured uplinks has no
+  actual cable/link, which already loses the redundancy a reader would
+  assume is intact. The parser slices out just the `nicinfo.sh` summary
+  table (it has a lot of unrelated per-NIC detail after it, separated
+  by a blank line, which `table_utils.parse_fixed_width_table` has no
+  notion of stopping at) using the same header/dash-separator detection
+  `table_utils.py` itself uses. Folded into the existing "Storage &
+  Hardware Findings" row/"Network" category and the existing "Network
+  (vSwitch/DVS)" component row rather than a new one. **Fired against
+  real data on first try**: the real 10-host EAMSC2 bundle shows hosts
+  `eamsc2esxi02`, `eamsc2esxi07`, and `eamsc2esxi08` each with all three
+  of their DVS switches configured with 2 uplinks (so
+  `vswitch_single_uplink` stays silent), but one of those two uplinks
+  per switch (9 total) reports `Link Status: Down` in `nicinfo.sh` --
+  redundancy that was already gone and completely invisible to the
+  configured-uplink-count check alone.
 
 ### Fixed
 

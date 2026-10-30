@@ -265,6 +265,57 @@ def test_sel_event_older_than_one_quarter_raises_no_finding(tmp_path):
     assert "hardware.sel_psu_failure" not in rule_ids
 
 
+def test_vswitch_uplink_link_down_raises_high_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path,
+        vswitch_uplinks=["vmnic0", "vmnic1"],
+        nic_link_status={"vmnic0": True, "vmnic1": False},
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "network.vswitch_uplink_link_down" in rule_ids
+    assert "network.vswitch_all_uplinks_down" not in rule_ids
+    # Still has 2 configured uplinks, so the plain uplink-count rule must not fire.
+    assert "network.vswitch_single_uplink" not in rule_ids
+
+
+def test_vswitch_all_uplinks_down_raises_critical_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path,
+        vswitch_uplinks=["vmnic0", "vmnic1"],
+        nic_link_status={"vmnic0": False, "vmnic1": False},
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "network.vswitch_all_uplinks_down" in rule_ids
+    assert "network.vswitch_uplink_link_down" not in rule_ids
+
+
+def test_vswitch_uplinks_both_up_raise_no_link_down_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path,
+        vswitch_uplinks=["vmnic0", "vmnic1"],
+        nic_link_status={"vmnic0": True, "vmnic1": True},
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "network.vswitch_uplink_link_down" not in rule_ids
+    assert "network.vswitch_all_uplinks_down" not in rule_ids
+
+
+def test_vswitch_uplink_link_down_without_nic_data_raises_no_finding(tmp_path):
+    """Without nicinfo.sh data, host.nic_link_up() returns None for every
+
+    uplink, which must not be treated as "down" -- no NIC data should
+    never silently masquerade as a finding.
+    """
+    host = _assessed_host(tmp_path, vswitch_uplinks=["vmnic0", "vmnic1"])
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "network.vswitch_uplink_link_down" not in rule_ids
+    assert "network.vswitch_all_uplinks_down" not in rule_ids
+
+
 def test_fleet_disabled_rules_are_excluded():
     host_a = HostInfo(hostname="host-a", bundle_source="a", cpu_model="Intel Xeon Gold 6258R")
     host_b = HostInfo(hostname="host-b", bundle_source="b", cpu_model="Intel Xeon Gold 6430")

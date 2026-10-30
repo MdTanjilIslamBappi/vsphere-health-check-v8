@@ -130,6 +130,21 @@ def test_run_assessment_flags_host_with_ipmi_sel_drive_predictive_failure(tmp_pa
     assert "hardware.sel_drive_predictive_failure" in rule_ids
 
 
+def test_run_assessment_flags_vswitch_uplink_with_no_physical_link(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz",
+        vswitch_uplinks=["vmnic0", "vmnic1"],
+        nic_link_status={"vmnic0": True, "vmnic1": False},
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    host = assessment.hosts[0]
+    assert host.nic_data_available is True
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "network.vswitch_uplink_link_down" in rule_ids
+
+
 def test_run_assessment_on_multi_host_vcenter_zip(tmp_path):
     bundle_path = build_vcenter_zip(
         tmp_path / "vc.zip", hostnames=["esxi-a.example.test", "esxi-b.example.test"]

@@ -219,6 +219,31 @@ def test_component_status_rows_reports_network_healthy_when_redundant():
     assert network_row.status == "Healthy"
 
 
+def test_component_status_rows_reports_vswitch_uplink_link_down():
+    from vhealth.models.findings import Finding, Severity
+
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        network_switch_data_available=True,
+        network_switches=[NetworkSwitch(name="DVS-01", uplinks=["vmnic0", "vmnic1"])],
+    )
+    finding = Finding(
+        rule_id="network.vswitch_uplink_link_down",
+        title="Network switch uplink is configured but has no physical link",
+        severity=Severity.HIGH,
+        summary="...",
+        affected_host="h1",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    network_row = rows["Network (vSwitch/DVS)"]
+    assert network_row.status != summary.NOT_ASSESSED
+    assert "configured uplink that has no physical link" in network_row.remarks
+    assert summary.category_for_rule_id("network.vswitch_uplink_link_down") == "Network"
+    assert summary.category_for_rule_id("network.vswitch_all_uplinks_down") == "Network"
+
+
 def test_virtual_machine_inventory_rows_resolve_datastore_name():
     host = HostInfo(
         hostname="h1",

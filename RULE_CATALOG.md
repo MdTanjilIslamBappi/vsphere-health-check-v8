@@ -41,6 +41,8 @@ see "Adding a rule" below.
 | `hardware.sel_drive_predictive_failure` | Hardware / SEL | Drive predictive-failure event recorded in the IPMI event log | High | `log_signal_counts.sel_drive_predictive_failure`, `log_events` (from `esxcli hardware ipmi sel list`) | Same 90-day quarterly scoping and Assert-only caveat as above. This is the storage backplane/HBA's own predictive-failure signal, independent of ESXi's SMART polling (`storage.smart_health_not_ok`). |
 | `hardware.sel_psu_failure` | Hardware / SEL | Power supply failure event recorded in the IPMI event log | High | `log_signal_counts.sel_psu_failure`, `log_events` (from `esxcli hardware ipmi sel list`) | Same 90-day quarterly scoping and Assert-only caveat as above. Only the explicit "Failure status" message is matched; the more ambiguous "AC lost"/"Redundancy Lost" SEL message types are intentionally not tracked to avoid flagging routine PDU/maintenance power blips. |
 | `hardware.sel_temperature_critical` | Hardware / SEL | Critical temperature threshold event recorded in the IPMI event log | High | `log_signal_counts.sel_temperature_critical`, `log_events` (from `esxcli hardware ipmi sel list`) | Same 90-day quarterly scoping and Assert-only caveat as above. Only the "Upper Critical" threshold message is matched; the earlier "Upper Non-critical" warning message is intentionally not tracked. |
+| `network.vswitch_uplink_link_down` | Network | Network switch uplink is configured but has no physical link | High | `network_switches[].uplinks`, `nic_adapters[].link_up` (`esxcfg-vswitch -l` cross-referenced against `nicinfo.sh`) | Point-in-time snapshot at capture only; requires both files to be present in the bundle. Only evaluated for a switch with 2+ configured uplinks -- 0 or 1 is `network.vswitch_single_uplink`'s territory instead. |
+| `network.vswitch_all_uplinks_down` | Network | All of a network switch's uplinks have no physical link | Critical | `network_switches[].uplinks`, `nic_adapters[].link_up` (`esxcfg-vswitch -l` cross-referenced against `nicinfo.sh`) | Point-in-time snapshot at capture only. |
 
 ## Validation status
 
@@ -153,6 +155,21 @@ but every one of those specific events is from January/February 2026,
 `log_signal_counts_excluded` rather than firing a finding; the in-window
 firing path for `sel_ecc_uncorrectable`, `sel_psu_failure`, and
 `sel_temperature_critical` is covered by a synthetic unit test only.
+
+`network.vswitch_uplink_link_down` has fired against real data: on the
+same real 10-host EAMSC2 bundle, hosts `eamsc2esxi02`, `eamsc2esxi07`,
+and `eamsc2esxi08` each show all three of their DVS switches
+(`EAMSC2_MGMT_SW01`, `EAMSC2_VMNET_SW01`, `EAMSC2_DMZ_SW01`) configured
+with 2 uplinks each in `esxcfg-vswitch -l` -- which alone looks
+perfectly redundant, and is why `network.vswitch_single_uplink` does
+not catch this -- but cross-referencing `nicinfo.sh` shows one of
+those two uplinks (`vmnic4`, `vmnic5`, or `vmnic6` respectively) reports
+`Link Status: Down` on every one of the 9 affected switch instances: a
+genuine, previously-unreported redundancy gap invisible to the
+configured-uplink-count check alone. `network.vswitch_all_uplinks_down`
+has not yet been observed firing (no real bundle seen so far has a
+switch with every uplink down) and is covered by a synthetic unit test
+only.
 
 ## Adding a rule
 

@@ -60,6 +60,7 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
 | `commands/localcli_storage-nmp-path-list.txt` | `multipath.py` | Per-device multipath path state (active/active unoptimized/dead), aggregated across every path block naming that device |
 | `commands/esxcfg-vswitch_-l.txt` | `vswitch.py` | Standard vSwitch/DVS name, MTU, used-port count, and uplink NIC list |
 | `commands/localcli_hardware-ipmi-sel-list--p--i--n-all.txt` | `ipmi_sel.py` | IPMI System Event Log history: uncorrectable-ECC, drive predictive-failure, PSU-failure, and critical-temperature `Assert` signals |
+| `commands/nicinfo.sh.txt` | `nic_link.py` | Physical NIC link state (Up/Down), cross-referenced against vSwitch/DVS uplink lists |
 
 ## Known gaps (not yet implemented)
 

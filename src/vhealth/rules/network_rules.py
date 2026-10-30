@@ -5,12 +5,20 @@ virtual switch (DVS) a host knows about, including its uplink NIC list.
 A switch with exactly one physical uplink has no NIC/cable/upstream-
 switch-port redundancy -- if that one uplink fails, everything on the
 switch loses connectivity.
+
+``_vswitch_uplink_link_down``/``_vswitch_all_uplinks_down`` go one step
+further: ``esxcfg-vswitch -l`` only reports which NICs are *configured*
+as uplinks, not whether they actually have a physical link right now.
+Cross-referencing against ``nicinfo.sh`` (``host.nic_link_up``) catches
+a switch that lists two uplinks for redundancy, but where one of them
+has no cable/no link -- already-reduced redundancy that looks perfectly
+healthy from ``esxcfg-vswitch -l`` alone.
 """
 
 from __future__ import annotations
 
 from vhealth.models.findings import Finding, Severity
-from vhealth.models.host import HostInfo
+from vhealth.models.host import HostInfo, NetworkSwitch
 from vhealth.rules.base import Rule
 
 # The BMC/iDRAC out-of-band management vSwitch uses a virtual USB NIC
@@ -60,6 +68,91 @@ def _vswitch_single_uplink(host: HostInfo) -> list[Finding]:
     return findings
 
 
+def _down_real_uplinks(host: HostInfo, switch: NetworkSwitch) -> tuple[list[str], list[str]]:
+    """Real (non-virtual) uplinks for a switch, and which of them have no
+
+    physical link. Only meaningful for a switch with 2+ real uplinks --
+    0 or 1 is already ``network.vswitch_single_uplink``'s territory.
+    """
+    real_uplinks = _real_uplinks(switch.uplinks)
+    if len(real_uplinks) < 2:
+        return [], []
+    down = [u for u in real_uplinks if host.nic_link_up(u) is False]
+    return real_uplinks, down
+
+
+def _vswitch_uplink_link_down(host: HostInfo) -> list[Finding]:
+    findings = []
+    for switch in host.network_switches:
+        real_uplinks, down = _down_real_uplinks(host, switch)
+        if not down or len(down) >= len(real_uplinks):
+            continue
+        kind = "DVS" if switch.is_distributed else "vSwitch"
+        findings.append(
+            Finding(
+                rule_id="network.vswitch_uplink_link_down",
+                title="Network switch uplink is configured but has no physical link",
+                severity=Severity.HIGH,
+                summary=(
+                    f"{host.hostname}: {kind} '{switch.name}' lists "
+                    f"{len(real_uplinks)} uplinks ({', '.join(real_uplinks)}), but "
+                    f"the following show Link Status: Down -- {', '.join(down)} -- "
+                    "this switch's redundancy is already reduced even though "
+                    "esxcfg-vswitch -l alone looks healthy."
+                ),
+                evidence=[f"nicinfo.sh: {u} Link Status = Down" for u in down],
+                affected_host=host.hostname,
+                affected_object=switch.name,
+                remediation=(
+                    "Check the physical cable/SFP/transceiver and upstream switch "
+                    "port for the named uplink NIC(s); this is a link-layer problem, "
+                    "not an ESXi configuration issue."
+                ),
+                limitations=(
+                    "A point-in-time snapshot from the bundle's capture moment; a "
+                    "link that recovered after capture is not reflected. Requires "
+                    "both esxcfg-vswitch -l and nicinfo.sh data in the bundle."
+                ),
+            )
+        )
+    return findings
+
+
+def _vswitch_all_uplinks_down(host: HostInfo) -> list[Finding]:
+    findings = []
+    for switch in host.network_switches:
+        real_uplinks, down = _down_real_uplinks(host, switch)
+        if not down or len(down) < len(real_uplinks):
+            continue
+        kind = "DVS" if switch.is_distributed else "vSwitch"
+        findings.append(
+            Finding(
+                rule_id="network.vswitch_all_uplinks_down",
+                title="All of a network switch's uplinks have no physical link",
+                severity=Severity.CRITICAL,
+                summary=(
+                    f"{host.hostname}: {kind} '{switch.name}' has "
+                    f"{len(real_uplinks)} configured uplink(s) ({', '.join(down)}), "
+                    "and every one of them reports Link Status: Down -- everything "
+                    "on this switch is currently without network connectivity."
+                ),
+                evidence=[f"nicinfo.sh: {u} Link Status = Down" for u in down],
+                affected_host=host.hostname,
+                affected_object=switch.name,
+                remediation=(
+                    "Check the physical cable/SFP/transceiver and upstream switch "
+                    "port for every uplink NIC on this switch immediately; any VM "
+                    "port group on it is likely already affected."
+                ),
+                limitations=(
+                    "A point-in-time snapshot from the bundle's capture moment; a "
+                    "link that recovered after capture is not reflected."
+                ),
+            )
+        )
+    return findings
+
+
 RULES: list[Rule] = [
     Rule(
         rule_id="network.vswitch_single_uplink",
@@ -71,5 +164,24 @@ RULES: list[Rule] = [
             "are actually independent upstream."
         ),
         evaluate=_vswitch_single_uplink,
+    ),
+    Rule(
+        rule_id="network.vswitch_uplink_link_down",
+        title="Network switch uplink is configured but has no physical link",
+        default_severity=Severity.HIGH,
+        evidence_required=("network_switches[].uplinks", "nic_adapters[].link_up"),
+        limitations=(
+            "Point-in-time snapshot at capture only; requires both esxcfg-vswitch -l "
+            "and nicinfo.sh data in the bundle."
+        ),
+        evaluate=_vswitch_uplink_link_down,
+    ),
+    Rule(
+        rule_id="network.vswitch_all_uplinks_down",
+        title="All of a network switch's uplinks have no physical link",
+        default_severity=Severity.CRITICAL,
+        evidence_required=("network_switches[].uplinks", "nic_adapters[].link_up"),
+        limitations="Point-in-time snapshot at capture only.",
+        evaluate=_vswitch_all_uplinks_down,
     ),
 ]

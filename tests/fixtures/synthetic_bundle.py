@@ -98,6 +98,7 @@ def build_host_dir(
     vswitch_mtu: int = 1500,
     ipmi_sel_message: str | None = None,
     ipmi_sel_when: str = "2026-01-15T10:05:00",
+    nic_link_status: dict[str, bool] | None = None,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -148,6 +149,11 @@ def build_host_dir(
     list`` dump with one record carrying that exact ``Message`` text
     (e.g. ``"Assert + Memory Uncorrectable ECC"``) timestamped
     ``ipmi_sel_when``; left as ``None``, no SEL data is written at all.
+
+    ``nic_link_status``, if given (e.g. ``{"vmnic0": True, "vmnic1":
+    False}``), adds a ``nicinfo.sh`` dump with one row per named NIC and
+    that Link Status (``Up``/``Down``); left as ``None``, no NIC link
+    data is written at all.
     """
     bundle_dir = root / f"esx-{hostname}-2026-01-15"
     (bundle_dir / "commands").mkdir(parents=True)
@@ -404,6 +410,24 @@ def build_host_dir(
             / "commands"
             / "localcli_hardware-ipmi-sel-list--p--i--n-all.txt"
         ).write_text(sel_dump, encoding="utf-8")
+
+    if nic_link_status is not None:
+        header = "Name    PCI Device    Driver   Admin Status  Link Status  Speed  Duplex  MAC Address        MTU   Description"
+        sep = "------  ------------  -------  ------------  -----------  -----  ------  -----------------  ----  -----------"
+        rows = [header, sep]
+        for nic_name, link_up in nic_link_status.items():
+            state = "Up" if link_up else "Down"
+            speed = "10000" if link_up else "0"
+            rows.append(
+                f"{nic_name}  0000:18:00.0  bnxtnet  Up            {state}           "
+                f"{speed}  Full    e4:3d:1a:2c:0f:28  1500  Synthetic NIC"
+            )
+        # A blank line then unrelated per-NIC detail, as in the real file --
+        # exercises the parser's "stop at the first blank line" trimming.
+        nicinfo_dump = "\n".join(rows) + "\n\nNIC:  vmnic0\n   NICInfo:\n      Link Detected: true\n"
+        (bundle_dir / "commands" / "nicinfo.sh.txt").write_text(
+            nicinfo_dump, encoding="utf-8"
+        )
 
     return bundle_dir
 

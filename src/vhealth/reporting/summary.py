@@ -49,7 +49,12 @@ _MULTIPATH_RULE_IDS = {
     "storage.multipath_all_paths_dead",
     "storage.multipath_reduced_redundancy",
 }
-_NETWORK_RULE_IDS = {"network.vswitch_single_uplink", "fleet.vswitch_mtu_mismatch"}
+_NETWORK_RULE_IDS = {
+    "network.vswitch_single_uplink",
+    "network.vswitch_uplink_link_down",
+    "network.vswitch_all_uplinks_down",
+    "fleet.vswitch_mtu_mismatch",
+}
 _STORAGE_HARDWARE_RULE_IDS = (
     _DEVICE_HEALTH_RULE_IDS | _LOG_SIGNAL_RULE_IDS | _SENSOR_RULE_IDS | _MULTIPATH_RULE_IDS
 )
@@ -163,7 +168,8 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
     )
     has_switch_data = any(h.network_switch_data_available for h in assessment.hosts)
     network_item = (
-        "vSwitch/DVS uplink redundancy and cross-host MTU consistency (esxcfg-vswitch -l)"
+        "vSwitch/DVS uplink redundancy, physical uplink link state, and cross-host "
+        "MTU consistency (esxcfg-vswitch -l, nicinfo.sh)"
         if has_switch_data
         else "vSwitch/DVS uplink redundancy and MTU consistency -- not assessed; no "
         "esxcfg-vswitch -l data found in this bundle"
@@ -452,6 +458,11 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
         single_uplink_count = sum(
             1 for f in network_findings if f.rule_id == "network.vswitch_single_uplink"
         )
+        link_down_count = sum(
+            1
+            for f in network_findings
+            if f.rule_id in ("network.vswitch_uplink_link_down", "network.vswitch_all_uplinks_down")
+        )
         mtu_mismatch_count = sum(
             1 for f in network_findings if f.rule_id == "fleet.vswitch_mtu_mismatch"
         )
@@ -459,6 +470,11 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
             bits = []
             if single_uplink_count:
                 bits.append(f"{single_uplink_count} switch(es) with only one uplink")
+            if link_down_count:
+                bits.append(
+                    f"{link_down_count} switch(es) with a configured uplink that has no "
+                    "physical link"
+                )
             if mtu_mismatch_count:
                 bits.append(f"{mtu_mismatch_count} switch(es) with inconsistent MTU across hosts")
             network_remark = "; ".join(bits) + "."
@@ -810,8 +826,9 @@ def detailed_observations(assessment: Assessment) -> list[str]:
         network_findings = _by_ids(findings, _NETWORK_RULE_IDS)
         if network_findings:
             items.append(
-                f"{len(network_findings)} vSwitch/DVS finding(s) (single-uplink and/or "
-                "cross-host MTU mismatch) observed; see Recommendation."
+                f"{len(network_findings)} vSwitch/DVS finding(s) (single-uplink, "
+                "configured-but-no-link uplink, and/or cross-host MTU mismatch) "
+                "observed; see Recommendation."
             )
         else:
             items.append(
@@ -848,6 +865,8 @@ _CATEGORY_BY_RULE_ID = {
     "storage.multipath_all_paths_dead": "Storage",
     "storage.multipath_reduced_redundancy": "Storage",
     "network.vswitch_single_uplink": "Network",
+    "network.vswitch_uplink_link_down": "Network",
+    "network.vswitch_all_uplinks_down": "Network",
     "fleet.vswitch_mtu_mismatch": "Network",
     "coverage.limited_diagnostic_data": "Other",
     "vcenter.core_service_stopped": "vCenter",

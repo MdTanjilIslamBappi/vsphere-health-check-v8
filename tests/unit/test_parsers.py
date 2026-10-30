@@ -9,6 +9,7 @@ from vhealth.parsers import (
     hardware_inventory,
     ipmi_sel,
     multipath,
+    nic_link,
     ntp,
     readme,
     sensors,
@@ -387,3 +388,23 @@ def test_ipmi_sel_parser_reports_warning_when_file_missing(tmp_path):
     host_dir, host = _build_host(tmp_path)
     warnings = ipmi_sel.parse(host_dir, host)
     assert warnings != []
+
+
+def test_nic_link_parser_extracts_link_state_and_stops_at_blank_line(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path, nic_link_status={"vmnic0": True, "vmnic1": False}
+    )
+    warnings = nic_link.parse(host_dir, host)
+    assert warnings == []
+    assert host.nic_data_available is True
+    assert len(host.nic_adapters) == 2
+    assert host.nic_link_up("vmnic0") is True
+    assert host.nic_link_up("vmnic1") is False
+    assert host.nic_link_up("vmnic99") is None
+
+
+def test_nic_link_parser_reports_warning_when_file_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = nic_link.parse(host_dir, host)
+    assert warnings != []
+    assert host.nic_data_available is False

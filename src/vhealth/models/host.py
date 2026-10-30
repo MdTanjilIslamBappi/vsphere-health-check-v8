@@ -102,6 +102,20 @@ class NetworkSwitch(BaseModel):
     uplinks: list[str] = Field(default_factory=list)
 
 
+class NetworkAdapter(BaseModel):
+    """A physical NIC's link state (nicinfo.sh output).
+
+    ``link_up`` is distinct from the NIC's own admin/enabled state -- a
+    NIC can be administratively up with no cable plugged in (an unused
+    spare port, not a problem on its own). It only becomes one when that
+    same NIC name also appears in a vSwitch/DVS's configured uplink list
+    (see ``network_rules.py``).
+    """
+
+    name: str
+    link_up: bool
+
+
 COVERAGE_CATEGORIES = (
     "readme",
     "system_version",
@@ -155,6 +169,10 @@ class HostInfo(BaseModel):
     # Standard vSwitch/DVS configuration (esxcfg-vswitch -l).
     network_switch_data_available: bool = False
     network_switches: list[NetworkSwitch] = Field(default_factory=list)
+    # Physical NIC link state (nicinfo.sh), cross-referenced against
+    # network_switches[].uplinks in network_rules.py.
+    nic_data_available: bool = False
+    nic_adapters: list[NetworkAdapter] = Field(default_factory=list)
     sensors: list[HardwareSensor] = Field(default_factory=list)
     log_events: list[str] = Field(default_factory=list)
     log_signal_counts: dict[str, int] = Field(default_factory=dict)
@@ -181,6 +199,13 @@ class HostInfo(BaseModel):
         for ds in self.datastores:
             if naa_id in (n.lower() for n in ds.naa_ids):
                 return ds.name
+        return None
+
+    def nic_link_up(self, nic_name: str) -> bool | None:
+        """Whether a physical NIC has an active link, or ``None`` if unknown."""
+        for adapter in self.nic_adapters:
+            if adapter.name == nic_name:
+                return adapter.link_up
         return None
 
     def datastore_name_for_uuid(self, datastore_uuid: str | None) -> str | None:
