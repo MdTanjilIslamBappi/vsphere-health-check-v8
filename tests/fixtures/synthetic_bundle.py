@@ -299,12 +299,13 @@ _VPXD_LOG = """2026-01-15T07:44:43.913Z info vpxd[07159] [Originator@6876 sub=Mo
 """
 
 # Membership lines carry the member host morefs on the same line; each
-# ``[vim.HostSystem:host-N,HOSTNAME]`` chunk is one member.
+# ``[vim.HostSystem:host-N,HOSTNAME]`` chunk is one member. Hostnames are
+# kept short deliberately -- see the MAX_PATH note on build_vcsa_dir below.
 _VCLS_MEMBERSHIP_LINE = (
     "2026-01-15T07:44:20.148Z info vpxd[2422740] [Originator@6876 sub=MoCluster "
     "opID=PodCrxMgr-domain-c1001-174317] Dumping vCLS Pod Crx host infos; domain-c1001, "
-    "[{[vim.HostSystem:host-13043,esx01-synthetic.example.test], st: 0, vm: (null), t: "
-    "}, {[vim.HostSystem:host-13044,esx02-synthetic.example.test], st: 0, vm: (null)}"
+    "[{[vim.HostSystem:host-13043,esx01.example.test], st: 0, vm: (null), t: "
+    "}, {[vim.HostSystem:host-13044,esx02.example.test], st: 0, vm: (null)}"
     ", attempt: 174317}\n"
 )
 

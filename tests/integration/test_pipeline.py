@@ -103,19 +103,16 @@ def test_cluster_name_resolves_via_vcls_membership_fallback(tmp_path):
     cluster name, as long as the vCenter bundle's vCLS membership log lists
     that hostname under a cluster moref vhealth can name.
 
-    Keep this test's own function name short: this nests a .tgz inside a
-    .zip, and on Windows the extraction guard deliberately refuses to
+    This nests a .tgz inside a .zip, which doubles the extracted path
+    depth; on Windows the extraction guard deliberately refuses to
     extract members whose full path would exceed the historical MAX_PATH
-    limit (see extraction_guard.py) -- a long pytest tmp_path plus a long
-    test node name here is enough to trip that and silently drop
-    clusterAdmin_cluster-status.txt, which looks like a resolution bug
-    but is really just this test being too verbose. The hostname below
-    must stay "esx01-synthetic.example.test" -- it's one of the two
-    hostnames hardcoded into _VCLS_MEMBERSHIP_LINE.
+    limit (see extraction_guard.py), so keep the hostname below short --
+    it must also stay one of the two short hostnames hardcoded into
+    _VCLS_MEMBERSHIP_LINE.
     """
     bundle_path = build_vcenter_zip_with_vcsa(
         tmp_path / "vc.zip",
-        hostnames=["esx01-synthetic.example.test"],
+        hostnames=["esx01.example.test"],
         cluster_name="EAMSC2",
         cluster_moref="domain-c1001",
     )

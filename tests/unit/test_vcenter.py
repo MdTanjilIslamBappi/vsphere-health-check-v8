@@ -81,8 +81,8 @@ def test_parse_vcsa_bundle_cluster_inventory(tmp_path):
     assert info.cluster_names == {"domain-c1001": "EAMSC2"}
     assert info.cluster_members == {
         "domain-c1001": [
-            "esx01-synthetic.example.test",
-            "esx02-synthetic.example.test",
+            "esx01.example.test",
+            "esx02.example.test",
         ]
     }
 
