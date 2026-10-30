@@ -109,6 +109,17 @@ and the "Known limitations" section of [README.md](README.md)).
 
 ### Fixed
 
+- CI's `push` trigger (`.github/workflows/ci.yml`) was scoped to
+  `branches: [main]`, but the repository's actual default branch is
+  `master` -- so pushing straight to `master` never ran CI via that
+  trigger (the `pull_request` trigger was unaffected). Found during a
+  Stage 0 baseline audit; fixed by pointing the trigger at `master`.
+- `_resolve_authorship()` decided whether to prompt based solely on
+  `sys.stdin.isatty()`, which can report a tty is attached even in some
+  unattended/automation contexts with nobody present to answer -- leaving
+  the prompt to hang indefinitely. The prompts are now wrapped so an
+  `EOFError`/abort while reading input is treated the same as
+  `--no-prompt` (leave the field unset) instead of propagating.
 - `supported_format_coverage.log_signals` (and the new coverage rule built
   on the same data) previously computed "did a bad signal fire in the
   logs" rather than "was log data present to check" -- a perfectly

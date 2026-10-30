@@ -83,6 +83,11 @@ def _resolve_authorship(
     Only prompts interactively when attached to a real terminal and
     --no-prompt was not given; a non-interactive run (CI, a script) simply
     leaves whatever was not passed as a flag unset rather than hanging.
+
+    ``sys.stdin.isatty()`` is only a best-effort signal -- some automation
+    contexts (e.g. a pty-wrapped shell) report a tty with nobody present to
+    answer. If a prompt hits EOF/abort anyway, treat it the same as
+    --no-prompt instead of propagating the error.
     """
     if no_prompt or not sys.stdin.isatty():
         return ReportAuthorship(
@@ -93,20 +98,23 @@ def _resolve_authorship(
             description=revision_description,
         )
 
-    if engineer_name is None:
-        engineer_name = click.prompt(
-            "Engineer name (for the report cover page, press Enter to skip)",
-            default="",
-            show_default=False,
-        ).strip() or None
-    if report_author is None:
-        report_author = click.prompt(
-            "Report author (press Enter to skip)", default="", show_default=False
-        ).strip() or None
-    if verifier_name is None:
-        verifier_name = click.prompt(
-            "Verified by (press Enter to skip)", default="", show_default=False
-        ).strip() or None
+    try:
+        if engineer_name is None:
+            engineer_name = click.prompt(
+                "Engineer name (for the report cover page, press Enter to skip)",
+                default="",
+                show_default=False,
+            ).strip() or None
+        if report_author is None:
+            report_author = click.prompt(
+                "Report author (press Enter to skip)", default="", show_default=False
+            ).strip() or None
+        if verifier_name is None:
+            verifier_name = click.prompt(
+                "Verified by (press Enter to skip)", default="", show_default=False
+            ).strip() or None
+    except (EOFError, click.exceptions.Abort):
+        pass
 
     return ReportAuthorship(
         engineer_name=engineer_name,
