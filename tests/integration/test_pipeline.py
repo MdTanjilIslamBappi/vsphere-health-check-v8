@@ -160,7 +160,14 @@ def test_run_assessment_flags_datastore_low_on_free_space(tmp_path):
 
 
 def test_run_assessment_flags_configstore_integrity_check_failure(tmp_path):
-    bundle_path = build_tgz(tmp_path / "host.tgz", configstore_integrity_ok=False)
+    # Very short hostname deliberately: this test's command filename
+    # (sqlite3_etcvmwareconfigstorecurrent-store-1-PRAGMAintegrity_check.txt,
+    # 72 characters) is long enough that even a moderately short hostname
+    # can trip the extraction guard's Windows MAX_PATH safety check (see
+    # extraction_guard.py) once combined with a deep CI tmp_path.
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz", hostname="a", configstore_integrity_ok=False
+    )
     config = load_config(None)
     assessment = run_assessment(bundle_path, tmp_path / "out", config)
 
