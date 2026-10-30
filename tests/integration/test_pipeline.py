@@ -107,6 +107,18 @@ def test_run_assessment_flags_host_with_all_multipath_paths_dead(tmp_path):
     assert "storage.multipath_all_paths_dead" in rule_ids
 
 
+def test_run_assessment_flags_host_with_single_uplink_switch(tmp_path):
+    bundle_path = build_tgz(tmp_path / "host.tgz", vswitch_uplinks=["vmnic0"])
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    host = assessment.hosts[0]
+    assert host.network_switch_data_available is True
+    assert host.network_switches[0].uplinks == ["vmnic0"]
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "network.vswitch_single_uplink" in rule_ids
+
+
 def test_run_assessment_on_multi_host_vcenter_zip(tmp_path):
     bundle_path = build_vcenter_zip(
         tmp_path / "vc.zip", hostnames=["esxi-a.example.test", "esxi-b.example.test"]

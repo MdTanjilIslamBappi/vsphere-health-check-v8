@@ -17,6 +17,7 @@ from vhealth.parsers import (
     vib,
     vm_inventory,
     vmk_log,
+    vswitch,
 )
 
 
@@ -207,6 +208,7 @@ def test_parsers_report_warnings_when_evidence_missing(tmp_path):
     assert coredump.parse(empty_dir, host) != []
     assert vib.parse(empty_dir, host) != []
     assert multipath.parse(empty_dir, host) != []
+    assert vswitch.parse(empty_dir, host) != []
 
 
 def test_hardware_inventory_parser_extracts_server_and_cpu_model(tmp_path):
@@ -322,3 +324,25 @@ def test_multipath_parser_reports_warning_when_file_missing(tmp_path):
     warnings = multipath.parse(host_dir, host)
     assert warnings != []
     assert host.multipath_data_available is False
+
+
+def test_vswitch_parser_extracts_dvs_name_mtu_and_uplinks(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path, vswitch_name="DVS-01", vswitch_uplinks=["vmnic0", "vmnic1"], vswitch_mtu=9000
+    )
+    warnings = vswitch.parse(host_dir, host)
+    assert warnings == []
+    assert host.network_switch_data_available is True
+    assert len(host.network_switches) == 1
+    switch = host.network_switches[0]
+    assert switch.name == "DVS-01"
+    assert switch.is_distributed is True
+    assert switch.mtu == 9000
+    assert switch.uplinks == ["vmnic0", "vmnic1"]
+
+
+def test_vswitch_parser_reports_warning_when_file_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = vswitch.parse(host_dir, host)
+    assert warnings != []
+    assert host.network_switch_data_available is False

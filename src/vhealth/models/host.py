@@ -92,6 +92,16 @@ class MultipathDevice(BaseModel):
     dead_paths: int = 0
 
 
+class NetworkSwitch(BaseModel):
+    """A standard vSwitch or distributed virtual switch (esxcfg-vswitch -l)."""
+
+    name: str
+    is_distributed: bool = False
+    mtu: int | None = None
+    used_ports: int | None = None
+    uplinks: list[str] = Field(default_factory=list)
+
+
 COVERAGE_CATEGORIES = (
     "readme",
     "system_version",
@@ -142,6 +152,9 @@ class HostInfo(BaseModel):
     # per device from every path block that names it.
     multipath_data_available: bool = False
     multipath_devices: list[MultipathDevice] = Field(default_factory=list)
+    # Standard vSwitch/DVS configuration (esxcfg-vswitch -l).
+    network_switch_data_available: bool = False
+    network_switches: list[NetworkSwitch] = Field(default_factory=list)
     sensors: list[HardwareSensor] = Field(default_factory=list)
     log_events: list[str] = Field(default_factory=list)
     log_signal_counts: dict[str, int] = Field(default_factory=dict)

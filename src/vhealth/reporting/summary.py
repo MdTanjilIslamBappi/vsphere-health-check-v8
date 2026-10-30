@@ -43,6 +43,7 @@ _MULTIPATH_RULE_IDS = {
     "storage.multipath_all_paths_dead",
     "storage.multipath_reduced_redundancy",
 }
+_NETWORK_RULE_IDS = {"network.vswitch_single_uplink", "fleet.vswitch_mtu_mismatch"}
 _STORAGE_HARDWARE_RULE_IDS = (
     _DEVICE_HEALTH_RULE_IDS | _LOG_SIGNAL_RULE_IDS | _SENSOR_RULE_IDS | _MULTIPATH_RULE_IDS
 )
@@ -154,6 +155,13 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         else "Installed VIB acceptance levels -- not assessed; no VIB data found in "
         "this bundle"
     )
+    has_switch_data = any(h.network_switch_data_available for h in assessment.hosts)
+    network_item = (
+        "vSwitch/DVS uplink redundancy and cross-host MTU consistency (esxcfg-vswitch -l)"
+        if has_switch_data
+        else "vSwitch/DVS uplink redundancy and MTU consistency -- not assessed; no "
+        "esxcfg-vswitch -l data found in this bundle"
+    )
     if vcenter is None:
         return (
             "ESXi host status and diagnostic data availability",
@@ -166,6 +174,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
             ntp_item,
             coredump_item,
             vib_item,
+            network_item,
             evc_item,
             datastore_item,
             vm_item,
@@ -184,6 +193,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         ntp_item,
         coredump_item,
         vib_item,
+        network_item,
         evc_item,
         datastore_item,
         vm_item,
@@ -427,6 +437,40 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
         )
     rows.append(ComponentStatus("VIB Acceptance Level", vib_status, vib_remark))
 
+    hosts_with_switch_data = [h for h in hosts if h.network_switch_data_available]
+    if hosts_with_switch_data:
+        network_findings = _by_ids(findings, _NETWORK_RULE_IDS)
+        network_status = (
+            _status_label(_worst_severity(network_findings)) if network_findings else "Healthy"
+        )
+        single_uplink_count = sum(
+            1 for f in network_findings if f.rule_id == "network.vswitch_single_uplink"
+        )
+        mtu_mismatch_count = sum(
+            1 for f in network_findings if f.rule_id == "fleet.vswitch_mtu_mismatch"
+        )
+        if network_findings:
+            bits = []
+            if single_uplink_count:
+                bits.append(f"{single_uplink_count} switch(es) with only one uplink")
+            if mtu_mismatch_count:
+                bits.append(f"{mtu_mismatch_count} switch(es) with inconsistent MTU across hosts")
+            network_remark = "; ".join(bits) + "."
+        else:
+            total_switches = sum(len(h.network_switches) for h in hosts_with_switch_data)
+            network_remark = (
+                f"{total_switches} vSwitch/DVS instance(s) identified across "
+                f"{len(hosts_with_switch_data)} of {total} host(s); no single-uplink or "
+                "cross-host MTU-mismatch issues detected."
+            )
+    else:
+        network_status = NOT_ASSESSED
+        network_remark = (
+            "vSwitch/DVS configuration -- not assessed; no esxcfg-vswitch -l data found "
+            "in this bundle."
+        )
+    rows.append(ComponentStatus("Network (vSwitch/DVS)", network_status, network_remark))
+
     storage_hw_findings = _by_ids(findings, _STORAGE_HARDWARE_RULE_IDS)
     rows.append(
         ComponentStatus(
@@ -568,6 +612,10 @@ def key_findings_at_a_glance(assessment: Assessment) -> list[str]:
     vib_row = next(r for r in rows if r.component == "VIB Acceptance Level")
     if vib_row.status != NOT_ASSESSED:
         items.append(vib_row.remarks)
+
+    network_row = next(r for r in rows if r.component == "Network (vSwitch/DVS)")
+    if network_row.status != NOT_ASSESSED:
+        items.append(network_row.remarks)
 
     evc_row = next(r for r in rows if r.component == "EVC Mode")
     if evc_row.status != NOT_ASSESSED:
@@ -751,6 +799,20 @@ def detailed_observations(assessment: Assessment) -> list[str]:
             "data have no CommunitySupported VIBs installed."
         )
 
+    switch_hosts = [h for h in hosts if h.network_switch_data_available]
+    if switch_hosts:
+        network_findings = _by_ids(findings, _NETWORK_RULE_IDS)
+        if network_findings:
+            items.append(
+                f"{len(network_findings)} vSwitch/DVS finding(s) (single-uplink and/or "
+                "cross-host MTU mismatch) observed; see Recommendation."
+            )
+        else:
+            items.append(
+                f"{len(switch_hosts)} of {total} host(s) with vSwitch/DVS data show no "
+                "single-uplink or cross-host MTU-mismatch issues."
+            )
+
     return items
 
 
@@ -775,6 +837,8 @@ _CATEGORY_BY_RULE_ID = {
     "hardware.community_supported_vib_installed": "Other",
     "storage.multipath_all_paths_dead": "Storage",
     "storage.multipath_reduced_redundancy": "Storage",
+    "network.vswitch_single_uplink": "Network",
+    "fleet.vswitch_mtu_mismatch": "Network",
     "coverage.limited_diagnostic_data": "Other",
     "vcenter.core_service_stopped": "vCenter",
     "vcenter.optional_service_stopped": "vCenter",

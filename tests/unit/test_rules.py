@@ -1,6 +1,6 @@
 from synthetic_bundle import build_host_dir
 
-from vhealth.models.host import HostInfo
+from vhealth.models.host import HostInfo, NetworkSwitch
 from vhealth.parsers import PARSER_MODULES
 from vhealth.rules import evaluate_all, evaluate_all_fleet
 
@@ -169,6 +169,63 @@ def test_multipath_no_dead_paths_raises_no_finding(tmp_path):
     rule_ids = {f.rule_id for f in findings}
     assert "storage.multipath_all_paths_dead" not in rule_ids
     assert "storage.multipath_reduced_redundancy" not in rule_ids
+
+
+def test_vswitch_single_uplink_raises_finding(tmp_path):
+    host = _assessed_host(tmp_path, vswitch_uplinks=["vmnic0"])
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "network.vswitch_single_uplink" in rule_ids
+
+
+def test_vswitch_redundant_uplinks_raise_no_finding(tmp_path):
+    host = _assessed_host(tmp_path, vswitch_uplinks=["vmnic0", "vmnic1"])
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "network.vswitch_single_uplink" not in rule_ids
+
+
+def test_vswitch_single_virtual_bmc_uplink_raises_no_finding(tmp_path):
+    """The BMC/iDRAC out-of-band vSwitch's single vusb0 uplink is not a
+
+    real NIC-redundancy risk and must not be flagged.
+    """
+    host = _assessed_host(tmp_path, vswitch_uplinks=["vusb0"])
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "network.vswitch_single_uplink" not in rule_ids
+
+
+def test_vswitch_mtu_mismatch_raises_fleet_finding():
+    host_a = HostInfo(
+        hostname="host-a",
+        bundle_source="a",
+        network_switches=[NetworkSwitch(name="DVS-01", mtu=1500, uplinks=["vmnic0", "vmnic1"])],
+    )
+    host_b = HostInfo(
+        hostname="host-b",
+        bundle_source="b",
+        network_switches=[NetworkSwitch(name="DVS-01", mtu=9000, uplinks=["vmnic0", "vmnic1"])],
+    )
+    findings = evaluate_all_fleet([host_a, host_b])
+    rule_ids = {f.rule_id for f in findings}
+    assert "fleet.vswitch_mtu_mismatch" in rule_ids
+
+
+def test_vswitch_matching_mtu_raises_no_fleet_finding():
+    host_a = HostInfo(
+        hostname="host-a",
+        bundle_source="a",
+        network_switches=[NetworkSwitch(name="DVS-01", mtu=1500, uplinks=["vmnic0", "vmnic1"])],
+    )
+    host_b = HostInfo(
+        hostname="host-b",
+        bundle_source="b",
+        network_switches=[NetworkSwitch(name="DVS-01", mtu=1500, uplinks=["vmnic0", "vmnic1"])],
+    )
+    findings = evaluate_all_fleet([host_a, host_b])
+    rule_ids = {f.rule_id for f in findings}
+    assert "fleet.vswitch_mtu_mismatch" not in rule_ids
 
 
 def test_fleet_disabled_rules_are_excluded():

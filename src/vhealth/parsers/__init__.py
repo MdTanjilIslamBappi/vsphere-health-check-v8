@@ -21,6 +21,7 @@ from vhealth.parsers import (
     vib,
     vm_inventory,
     vmk_log,
+    vswitch,
 )
 
 PARSER_MODULES = [
@@ -37,6 +38,7 @@ PARSER_MODULES = [
     coredump,
     vib,
     multipath,
+    vswitch,
 ]
 
 PARSER_VERSIONS = {m.__name__.rsplit(".", 1)[-1]: m.VERSION for m in PARSER_MODULES}

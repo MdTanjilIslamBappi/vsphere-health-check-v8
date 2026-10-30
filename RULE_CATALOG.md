@@ -13,8 +13,8 @@ rule.
 
 Each rule is also assigned a **category** (`src/vhealth/reporting/summary.py:_CATEGORY_BY_RULE_ID`),
 used to group the Recommendation section of the report by subsystem rather
-than as one flat list: `Storage`, `Hardware / SEL`, `CPU`, or `Other`.
-`Network` and `Memory` are reserved categories for rules not yet written --
+than as one flat list: `Storage`, `Hardware / SEL`, `CPU`, `Network`, or
+`Other`. `Memory` remains a reserved category for a rule not yet written --
 see "Adding a rule" below.
 
 | Rule ID | Category | Title | Severity | Evidence required | Limitations |
@@ -35,6 +35,8 @@ see "Adding a rule" below.
 | `hardware.ntp_not_synchronized` | Other | Host clock is not synchronized via NTP | Medium | `ntp_time_synchronized`, `ntp_servers` (from `esxcli system ntp get`) | Point-in-time snapshot from the bundle's capture moment only; a host that synced (or lost sync) before/after capture is not reflected. Does not distinguish "NTP service disabled" from "enabled but server unreachable" -- both surface as `Time Synchronized = false`. |
 | `hardware.coredump_not_configured` | Other | No active kernel-coredump target configured | Medium | `coredump_configured` (from `esxcli system coredump file list`) | Point-in-time snapshot at capture only. Implemented from documented esxcli behaviour; every real bundle seen so far has at least one `Active=true`/`Configured=true` row, so the firing (not-configured) case has not yet been observed against real-world data -- see below. |
 | `hardware.community_supported_vib_installed` | Other | Host has a CommunitySupported (unsupported) VIB installed | Medium | `community_supported_vibs` (from `esxcli software vib list`) | Only reports the acceptance level ESXi itself records; cannot see any separately-granted VMware GSS exception for a specific VIB in this environment. |
+| `network.vswitch_single_uplink` | Network | Network switch has only one uplink (no NIC redundancy) | Medium | `network_switches[].uplinks` (from `esxcfg-vswitch -l`) | Only counts the reported uplink NIC list; cannot see whether those NICs are actually independent upstream (e.g. the same top-of-rack switch). Excludes the virtual `vusb*` uplink used by the BMC/iDRAC out-of-band management vSwitch, which has no physical redundancy to have by design. |
+| `fleet.vswitch_mtu_mismatch` (**fleet rule**) | Network | Inconsistent MTU for the same vSwitch/DVS across hosts | Medium | `network_switches[].mtu` (from `esxcfg-vswitch -l`) on 2+ hosts in the assessment | Compares switches by exact name match across this assessment's hosts only; a standard vSwitch name reused per-host with an intentionally different MTU would also match, and it has no visibility into actual vCenter cluster membership. |
 
 ## Validation status
 
@@ -110,6 +112,23 @@ storage-access problem this rule correctly caught.
 `storage.multipath_reduced_redundancy` has not yet been observed firing
 (no real bundle seen so far has a device with some, but not all, paths
 dead) and is covered by a synthetic unit test only.
+
+`network.vswitch_single_uplink` has fired against real data: on the
+same real 10-host EAMSC2 bundle, host `eamsc2esxi09` shows all three of
+its DVS switches (`EAMSC2_MGMT_SW01`, `EAMSC2_DMZ_SW01`,
+`EAMSC2_VMNET_SW01`) configured with only one uplink NIC each, while
+every other host in the bundle has two uplinks on the same-named DVS --
+a genuine, previously-unreported redundancy gap. Hosts `eamsc2esxi14`
+and `eamsc2esxi15` each separately show a fourth DVS
+(`EAMSC2-Fedeils-VDS-SW1`) with only one uplink. The parser's whitespace-
+split approach (rather than a fixed header-offset slice) was also
+specifically validated against this bundle: `EAMSC2-Fedeils-VDS-SW1`'s
+22-character name is long enough to shift every later column to the
+right of where a short name would put them in the raw command output,
+and the parser still reads it correctly.
+`fleet.vswitch_mtu_mismatch` has not yet been observed firing (every
+switch in every real bundle seen so far is MTU 1500 everywhere) and is
+covered by a synthetic unit test only.
 
 ## Adding a rule
 

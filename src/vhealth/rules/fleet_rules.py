@@ -52,6 +52,46 @@ def _cpu_model_mismatch(hosts: list[HostInfo]) -> list[Finding]:
     ]
 
 
+def _vswitch_mtu_mismatch(hosts: list[HostInfo]) -> list[Finding]:
+    by_name: dict[str, dict[int, list[str]]] = defaultdict(lambda: defaultdict(list))
+    for host in hosts:
+        for switch in host.network_switches:
+            if switch.mtu is not None:
+                by_name[switch.name][switch.mtu].append(host.hostname)
+
+    findings = []
+    for name, by_mtu in sorted(by_name.items()):
+        if len(by_mtu) < 2:
+            continue
+        detail = "; ".join(
+            f"MTU {mtu} on {', '.join(sorted(names))}" for mtu, names in sorted(by_mtu.items())
+        )
+        findings.append(
+            Finding(
+                rule_id="fleet.vswitch_mtu_mismatch",
+                title="Inconsistent MTU for the same vSwitch/DVS across hosts",
+                severity=Severity.MEDIUM,
+                summary=(
+                    f"Switch '{name}' is configured with different MTU values across "
+                    f"the hosts in this assessment: {detail}."
+                ),
+                evidence=[f"esxcfg-vswitch -l: {name} -- {detail}"],
+                remediation=(
+                    "Align the MTU for this switch across every host that defines it -- "
+                    "for a distributed switch (DVS) this is normally meant to be one "
+                    "cluster-wide setting -- or confirm the difference is intentional."
+                ),
+                limitations=(
+                    "Compares switches by exact name match across this assessment's "
+                    "hosts only; a standard vSwitch name that happens to be reused "
+                    "per-host with an intentionally different MTU would also match, "
+                    "and this has no visibility into actual vCenter cluster membership."
+                ),
+            )
+        )
+    return findings
+
+
 RULES: list[FleetRule] = [
     FleetRule(
         rule_id="fleet.cpu_model_mismatch",
@@ -63,5 +103,16 @@ RULES: list[FleetRule] = [
             "membership or EVC configuration."
         ),
         evaluate=_cpu_model_mismatch,
+    ),
+    FleetRule(
+        rule_id="fleet.vswitch_mtu_mismatch",
+        title="Inconsistent MTU for the same vSwitch/DVS across hosts",
+        default_severity=Severity.MEDIUM,
+        evidence_required=("network_switches[].mtu",),
+        limitations=(
+            "Compares switches by exact name match only; has no visibility into actual "
+            "vCenter cluster membership."
+        ),
+        evaluate=_vswitch_mtu_mismatch,
     ),
 ]

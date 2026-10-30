@@ -58,6 +58,7 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
 | `commands/localcli_system-coredump-file-list.txt` | `coredump.py` | Whether a file-based kernel-coredump target is both active and configured |
 | `commands/localcli_software-vib-list.txt` | `vib.py` | Installed VIB acceptance levels; flags any `CommunitySupported` (unsupported by VMware GSS) VIB |
 | `commands/localcli_storage-nmp-path-list.txt` | `multipath.py` | Per-device multipath path state (active/active unoptimized/dead), aggregated across every path block naming that device |
+| `commands/esxcfg-vswitch_-l.txt` | `vswitch.py` | Standard vSwitch/DVS name, MTU, used-port count, and uplink NIC list |
 
 ## Known gaps (not yet implemented)
 

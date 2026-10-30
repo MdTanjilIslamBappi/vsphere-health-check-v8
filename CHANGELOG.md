@@ -148,6 +148,26 @@ and the "Known limitations" section of [README.md](README.md)).
   with its one and only known path dead on both `eamsc2esxi08` and
   `eamsc2esxi09` -- a genuine, previously-unreported storage-access
   problem this rule caught.
+- `network.vswitch_single_uplink` rule and `vswitch.py` parser: reads
+  each ESXi host's own `esxcfg-vswitch -l` output and flags any
+  standard vSwitch/DVS with exactly one physical uplink NIC (no
+  cable/card/upstream-switch-port redundancy), excluding the BMC/iDRAC
+  out-of-band vSwitch's virtual `vusb0` uplink, which has no physical
+  redundancy to have by design. Also adds `fleet.vswitch_mtu_mismatch`
+  (in `fleet_rules.py`), flagging a same-named vSwitch/DVS configured
+  with different MTU values across the hosts in one assessment.
+  Surfaced as a new "Network (vSwitch/DVS)" component row, and puts
+  the `Network` category (reserved since the report's first version)
+  to use for the first time. The `esxcfg-vswitch -l` output has no
+  dashed separator row and is not reliably fixed-width either -- a
+  real 22-character DVS name shifts every later column right of where
+  shorter names put them -- so the parser splits each data row on 2+
+  whitespace characters instead of slicing at fixed offsets.
+  **Fired against real data on first try**: the real 10-host EAMSC2
+  bundle shows host `eamsc2esxi09` with all three of its DVS switches
+  down to a single uplink each (every other host has two), and hosts
+  `eamsc2esxi14`/`eamsc2esxi15` each separately down to one uplink on
+  a fourth DVS -- five genuine, previously-unreported redundancy gaps.
 
 ### Fixed
 

@@ -1,6 +1,6 @@
 from vhealth.models.assessment import Assessment, AssessmentMetadata
 from vhealth.models.findings import Finding, Severity
-from vhealth.models.host import Datastore, HostInfo, VirtualMachine
+from vhealth.models.host import Datastore, HostInfo, NetworkSwitch, VirtualMachine
 from vhealth.reporting import summary
 
 
@@ -27,6 +27,7 @@ def test_component_status_rows_marks_unassessed_vcenter_sections():
     assert rows["Time Synchronization (NTP)"].status == summary.NOT_ASSESSED
     assert rows["Kernel Coredump Configuration"].status == summary.NOT_ASSESSED
     assert rows["VIB Acceptance Level"].status == summary.NOT_ASSESSED
+    assert rows["Network (vSwitch/DVS)"].status == summary.NOT_ASSESSED
 
 
 def test_component_status_rows_reports_real_datastore_and_vm_data_when_present():
@@ -180,6 +181,42 @@ def test_component_status_rows_reports_vib_healthy_when_no_community_vibs():
     rows = {row.component: row for row in summary.component_status_rows(assessment)}
     vib_row = rows["VIB Acceptance Level"]
     assert vib_row.status == "Healthy"
+
+
+def test_component_status_rows_reports_vswitch_single_uplink():
+    from vhealth.models.findings import Finding, Severity
+
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        network_switch_data_available=True,
+        network_switches=[NetworkSwitch(name="DVS-01", uplinks=["vmnic0"])],
+    )
+    finding = Finding(
+        rule_id="network.vswitch_single_uplink",
+        title="Network switch has only one uplink (no NIC redundancy)",
+        severity=Severity.MEDIUM,
+        summary="...",
+        affected_host="h1",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    network_row = rows["Network (vSwitch/DVS)"]
+    assert network_row.status != summary.NOT_ASSESSED
+    assert "1 switch(es) with only one uplink" in network_row.remarks
+
+
+def test_component_status_rows_reports_network_healthy_when_redundant():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        network_switch_data_available=True,
+        network_switches=[NetworkSwitch(name="DVS-01", uplinks=["vmnic0", "vmnic1"])],
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    network_row = rows["Network (vSwitch/DVS)"]
+    assert network_row.status == "Healthy"
 
 
 def test_virtual_machine_inventory_rows_resolve_datastore_name():

@@ -93,6 +93,9 @@ def build_host_dir(
     community_supported_vibs: list[str] | None = None,
     multipath_dead_paths: int | None = None,
     multipath_total_paths: int = 2,
+    vswitch_name: str = "Synthetic-DVS-01",
+    vswitch_uplinks: list[str] | None = None,
+    vswitch_mtu: int = 1500,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -132,6 +135,12 @@ def build_host_dir(
     path blocks, the first ``multipath_dead_paths`` of them marked
     ``Group State: dead`` and the rest ``active``; left as ``None``, no
     multipath data is written at all (multipath state not assessed).
+
+    ``vswitch_uplinks``, if given (including ``[]``), adds an
+    ``esxcfg-vswitch -l`` dump for one synthetic DVS named
+    ``vswitch_name`` with that uplink list and ``vswitch_mtu``; left as
+    ``None``, no vSwitch/DVS data is written at all (network not
+    assessed).
     """
     bundle_dir = root / f"esx-{hostname}-2026-01-15"
     (bundle_dir / "commands").mkdir(parents=True)
@@ -358,6 +367,17 @@ def build_host_dir(
             )
         (bundle_dir / "commands" / "localcli_storage-nmp-path-list.txt").write_text(
             "\n".join(blocks), encoding="utf-8"
+        )
+
+    if vswitch_uplinks is not None:
+        uplinks_text = ",".join(vswitch_uplinks)
+        stanza = (
+            "DVS Name         Num Ports   Used Ports  Configured Ports  MTU     Uplinks   \n"
+            f"{vswitch_name}  9216        5           512               "
+            f"{vswitch_mtu}    {uplinks_text}\n"
+        )
+        (bundle_dir / "commands" / "esxcfg-vswitch_-l.txt").write_text(
+            stanza, encoding="utf-8"
         )
 
     return bundle_dir
