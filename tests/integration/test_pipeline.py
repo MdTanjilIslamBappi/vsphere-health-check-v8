@@ -36,14 +36,22 @@ def test_run_assessment_reports_running_vms_without_any_vcenter_bundle(tmp_path)
 
 
 def test_run_assessment_observes_no_evc_masks_from_vm_power_on_logs(tmp_path):
+    # Short hostname/VM name deliberately: this test's VM log lives under
+    # vmfs/volumes/<uuid>/<vm-name>/vmware.log, which is extracted as a real
+    # file (unlike the plain VM-process-list test, which only parses a path
+    # string) -- on Windows that nesting plus a long default hostname trips
+    # the extraction guard's MAX_PATH safety check (see extraction_guard.py).
     bundle_path = build_tgz(
-        tmp_path / "host.tgz", vm_names=["vm-evc-check"], vm_no_evc_masks=True
+        tmp_path / "host.tgz",
+        hostname="esx-evc.example.test",
+        vm_names=["vm1"],
+        vm_no_evc_masks=True,
     )
     config = load_config(None)
     assessment = run_assessment(bundle_path, tmp_path / "out", config)
 
     host = assessment.hosts[0]
-    vm = next(v for v in host.virtual_machines if v.name == "vm-evc-check")
+    vm = next(v for v in host.virtual_machines if v.name == "vm1")
     assert vm.no_evc_masks_observed is True
 
 
