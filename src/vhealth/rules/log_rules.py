@@ -11,6 +11,10 @@ _SIGNAL_RULES = {
         Severity.CRITICAL,
         "A PDL event means ESXi determined a storage device will never "
         "return; any VM still running on it will fail I/O.",
+        "Check this host's vmkwarning log (the matching lines are listed below) "
+        "and run esxcli storage core device list for the affected device's "
+        "current path state, then correlate the event timestamp with the "
+        "SAN array controller and fabric/switch logs for the same LUN.",
     ),
     "apd_event": (
         "storage.apd_detected",
@@ -18,12 +22,19 @@ _SIGNAL_RULES = {
         Severity.CRITICAL,
         "An APD event means every path to a device was unavailable, even if "
         "only transiently.",
+        "Check this host's vmkwarning log (the matching lines are listed below) "
+        "for the affected device/path IDs, then correlate the event timestamp "
+        "with the SAN array controller and FC/iSCSI fabric or switch logs.",
     ),
     "path_dead": (
         "storage.path_dead_detected",
         "Dead storage path/device detected in vmkwarning log",
         Severity.HIGH,
         "A path or device was marked dead at least once during the log window.",
+        "Check this host's vmkwarning log (the matching lines are listed below) "
+        "and the HBA/multipathing plugin status for the named path, then "
+        "correlate the timestamp with the SAN switch port and array-side "
+        "presentation logs for the same device.",
     ),
     "alua_no_connection": (
         "storage.alua_path_connectivity",
@@ -31,6 +42,9 @@ _SIGNAL_RULES = {
         Severity.MEDIUM,
         "SATP_ALUA could not reach a target port; frequent recurrence suggests "
         "flapping SAN/fabric connectivity rather than a one-off blip.",
+        "Check this host's vmkwarning log (the matching lines are listed below) "
+        "for the affected target port, then correlate the timestamps with the "
+        "storage array's ALUA target-port-group state and fabric/switch logs.",
     ),
     "vob_storage_problem": (
         "storage.vob_problem_event",
@@ -38,6 +52,9 @@ _SIGNAL_RULES = {
         Severity.MEDIUM,
         "vobd only logs events the ESXi host itself classified as a problem "
         "(esx.problem.*), as opposed to routine audit events.",
+        "Check this host's vobd log (the matching lines are listed below) for "
+        "the affected device/event ID, then correlate the timestamp with the "
+        "SAN array and fabric/switch logs for the same timeframe.",
     ),
 }
 
@@ -46,7 +63,7 @@ _REPEAT_THRESHOLD = 3
 
 def _log_signal_findings(host: HostInfo) -> list[Finding]:
     findings = []
-    for signal_name, (rule_id, title, severity, note) in _SIGNAL_RULES.items():
+    for signal_name, (rule_id, title, severity, note, where_to_check) in _SIGNAL_RULES.items():
         count = host.log_signal_counts.get(signal_name, 0)
         if count <= 0:
             continue
@@ -62,7 +79,7 @@ def _log_signal_findings(host: HostInfo) -> list[Finding]:
                 summary=f"{count} matching log line(s) found in the last 90 days (this quarter).",
                 evidence=examples,
                 affected_host=host.hostname,
-                remediation="Correlate the timestamps with storage array/fabric-side logs.",
+                remediation=where_to_check,
                 limitations=(
                     f"{note} Scoped to this quarter (the last 90 days of the bundle's own "
                     "capture date); only the rotations retained in the bundle at capture "

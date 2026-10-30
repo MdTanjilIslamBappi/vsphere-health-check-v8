@@ -303,13 +303,37 @@ def detailed_observations(assessment: Assessment) -> list[str]:
     return items
 
 
+# Which domain each rule belongs to, for grouping/reading the Recommendation
+# section by subsystem rather than as one flat list. Every rule_id must have
+# an entry here -- CONTRIBUTING.md's "add a rule" checklist includes adding
+# one. Categories not yet produced by any rule (Network, Memory) are kept
+# available for rules added later.
+_CATEGORY_BY_RULE_ID = {
+    "storage.smart_health_not_ok": "Storage",
+    "storage.smart_reallocated_sectors": "Storage",
+    "storage.device_not_on": "Storage",
+    "storage.pdl_detected": "Storage",
+    "storage.apd_detected": "Storage",
+    "storage.path_dead_detected": "Storage",
+    "storage.alua_path_connectivity": "Storage",
+    "storage.vob_problem_event": "Storage",
+    "hardware.ipmi_sensor_asserted": "Hardware / SEL",
+    "fleet.cpu_model_mismatch": "CPU",
+    "coverage.limited_diagnostic_data": "Other",
+}
+_DEFAULT_CATEGORY = "Other"
+_MAX_EVIDENCE_LINES_PER_GROUP = 5
+
+
 @dataclass(frozen=True)
 class RecommendationGroup:
     title: str
+    category: str
     severity: str
     affected: list[str]
     action: str
     limitations: str | None
+    evidence: list[str]
 
 
 def recommendation_groups(assessment: Assessment) -> list[RecommendationGroup]:
@@ -323,13 +347,25 @@ def recommendation_groups(assessment: Assessment) -> list[RecommendationGroup]:
         affected = sorted({f.affected_host for f in items if f.affected_host})
         action = next((f.remediation for f in items if f.remediation), None)
         limitations = next((f.limitations for f in items if f.limitations), None)
+        evidence: list[str] = []
+        for finding in items:
+            for line in finding.evidence:
+                tagged = f"{finding.affected_host}: {line}" if finding.affected_host else line
+                if tagged not in evidence:
+                    evidence.append(tagged)
+                if len(evidence) >= _MAX_EVIDENCE_LINES_PER_GROUP:
+                    break
+            if len(evidence) >= _MAX_EVIDENCE_LINES_PER_GROUP:
+                break
         groups.append(
             RecommendationGroup(
                 title=items[0].title,
+                category=_CATEGORY_BY_RULE_ID.get(items[0].rule_id, _DEFAULT_CATEGORY),
                 severity=worst.value if worst else "info",
                 affected=affected or ["(fleet-wide)"],
                 action=action or "Review the finding details for this check.",
                 limitations=limitations,
+                evidence=evidence,
             )
         )
     groups.sort(key=lambda g: -Severity(g.severity).rank)

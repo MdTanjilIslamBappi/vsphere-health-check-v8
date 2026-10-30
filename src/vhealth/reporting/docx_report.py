@@ -261,6 +261,10 @@ def _add_recommendations(doc: Document, assessment: Assessment) -> None:
         run.bold = True
 
         p = doc.add_paragraph()
+        p.add_run("Category: ").bold = True
+        p.add_run(group.category)
+
+        p = doc.add_paragraph()
         p.add_run("Severity: ").bold = True
         p.add_run(group.severity.upper())
 
@@ -269,5 +273,17 @@ def _add_recommendations(doc: Document, assessment: Assessment) -> None:
         p.add_run(", ".join(group.affected))
 
         p = doc.add_paragraph()
-        p.add_run("Action: ").bold = True
+        p.add_run("Why it matters: ").bold = True
+        p.add_run(group.limitations or "See the companion findings log for detail.")
+
+        p = doc.add_paragraph()
+        p.add_run("Where to check / action: ").bold = True
         p.add_run(group.action)
+
+        if group.evidence:
+            p = doc.add_paragraph()
+            p.add_run("Evidence:").bold = True
+            table = doc.add_table(rows=0, cols=1)
+            table.style = "Light Grid Accent 1"
+            for line in group.evidence:
+                table.add_row().cells[0].text = line

@@ -84,6 +84,45 @@ def test_recommendation_groups_are_sorted_by_severity_and_deduplicate_hosts():
     assert groups[0].affected == ["h1"]
 
 
+def test_recommendation_groups_assign_category_by_rule_id():
+    findings = [
+        Finding(
+            rule_id="storage.pdl_detected", title="PDL", severity=Severity.CRITICAL,
+            summary="...", affected_host="h1",
+        ),
+        Finding(
+            rule_id="hardware.ipmi_sensor_asserted", title="Sensor", severity=Severity.HIGH,
+            summary="...", affected_host="h1",
+        ),
+        Finding(
+            rule_id="fleet.cpu_model_mismatch", title="CPU mismatch", severity=Severity.MEDIUM,
+            summary="...",
+        ),
+        Finding(
+            rule_id="coverage.limited_diagnostic_data", title="Limited data",
+            severity=Severity.LOW, summary="...", affected_host="h2",
+        ),
+    ]
+    assessment = Assessment(metadata=_metadata(), hosts=[], findings=findings)
+    by_title = {g.title: g.category for g in summary.recommendation_groups(assessment)}
+    assert by_title["PDL"] == "Storage"
+    assert by_title["Sensor"] == "Hardware / SEL"
+    assert by_title["CPU mismatch"] == "CPU"
+    assert by_title["Limited data"] == "Other"
+
+
+def test_recommendation_groups_carry_host_tagged_evidence():
+    findings = [
+        Finding(
+            rule_id="storage.pdl_detected", title="PDL", severity=Severity.CRITICAL,
+            summary="...", affected_host="h1", evidence=["[pdl_error] some log line"],
+        ),
+    ]
+    assessment = Assessment(metadata=_metadata(), hosts=[], findings=findings)
+    groups = summary.recommendation_groups(assessment)
+    assert groups[0].evidence == ["h1: [pdl_error] some log line"]
+
+
 def test_executive_summary_text_reports_no_findings_honestly():
     assessment = Assessment(metadata=_metadata(), hosts=[], findings=[])
     text = summary.executive_summary_text(assessment)

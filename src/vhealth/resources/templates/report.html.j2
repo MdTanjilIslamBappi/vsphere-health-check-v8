@@ -163,9 +163,15 @@
   {% for g in recommendation_groups %}
   <div class="recommendation">
     <h3>{{ g.title }}</h3>
+    <p><strong>Category:</strong> {{ g.category }}</p>
     <p><strong>Severity:</strong> {{ g.severity|upper }}</p>
     <p><strong>Affected:</strong> {{ g.affected|join(", ") }}</p>
-    <p><strong>Action:</strong> {{ g.action }}</p>
+    <p><strong>Why it matters:</strong> {{ g.limitations or "See the companion findings log for detail." }}</p>
+    <p><strong>Where to check / action:</strong> {{ g.action }}</p>
+    {% if g.evidence %}
+    <p><strong>Evidence:</strong></p>
+    <table>{% for line in g.evidence %}<tr><td>{{ line }}</td></tr>{% endfor %}</table>
+    {% endif %}
   </div>
   {% else %}
   <p>No findings were raised, so there are no recommendations to track.</p>
