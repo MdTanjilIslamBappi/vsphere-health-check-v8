@@ -96,14 +96,22 @@ def test_run_assessment_resolves_cluster_names_from_vcenter(tmp_path):
     assert host.cluster_name == "EAMSC2"
 
 
-def test_run_assessment_resolves_cluster_name_from_vcls_membership_without_host_cluster_id(
-    tmp_path,
-):
+def test_cluster_name_resolves_via_vcls_membership_fallback(tmp_path):
     """A host that never reports its own cluster ID (clusterAdmin output
 
     missing/stale is common in real bundles) must still resolve its
     cluster name, as long as the vCenter bundle's vCLS membership log lists
     that hostname under a cluster moref vhealth can name.
+
+    Keep this test's own function name short: this nests a .tgz inside a
+    .zip, and on Windows the extraction guard deliberately refuses to
+    extract members whose full path would exceed the historical MAX_PATH
+    limit (see extraction_guard.py) -- a long pytest tmp_path plus a long
+    test node name here is enough to trip that and silently drop
+    clusterAdmin_cluster-status.txt, which looks like a resolution bug
+    but is really just this test being too verbose. The hostname below
+    must stay "esx01-synthetic.example.test" -- it's one of the two
+    hostnames hardcoded into _VCLS_MEMBERSHIP_LINE.
     """
     bundle_path = build_vcenter_zip_with_vcsa(
         tmp_path / "vc.zip",
