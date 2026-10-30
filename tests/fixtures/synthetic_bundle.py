@@ -90,6 +90,7 @@ def build_host_dir(
     vm_no_evc_masks: bool = False,
     ntp_time_synchronized: bool | None = None,
     coredump_configured: bool | None = None,
+    community_supported_vibs: list[str] | None = None,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -118,6 +119,11 @@ def build_host_dir(
     ``esxcli system coredump file list`` dump with a single row whose
     Active/Configured flags match; left as ``None``, no coredump data is
     written at all (coredump not assessed).
+
+    ``community_supported_vibs``, if given (including ``[]``), adds an
+    ``esxcli software vib list`` dump with one baseline VMwareCertified
+    row plus one CommunitySupported row per listed name; left as
+    ``None``, no VIB data is written at all (VIB level not assessed).
     """
     bundle_dir = root / f"esx-{hostname}-2026-01-15"
     (bundle_dir / "commands").mkdir(parents=True)
@@ -305,6 +311,29 @@ def build_host_dir(
             / "commands"
             / "localcli_system-coredump-file-list.txt"
         ).write_text(coredump_dump, encoding="utf-8")
+
+    if community_supported_vibs is not None:
+        col_widths = [40, 10, 6, 19, 14, 9]
+        col_names = ["Name", "Version", "Vendor", "Acceptance Level", "Install Date", "Platforms"]
+        gap = "  "
+
+        def _vib_row(values: list[str]) -> str:
+            return gap.join(v.ljust(w) for v, w in zip(values, col_widths, strict=True))
+
+        lines = [
+            _vib_row(col_names),
+            gap.join("-" * w for w in col_widths),
+            _vib_row(
+                ["synthetic-certified-vib", "1.0.0-1", "SYN", "VMwareCertified", "2026-01-01", "host"]
+            ),
+        ]
+        for vib_name in community_supported_vibs:
+            lines.append(
+                _vib_row([vib_name, "1.0.0-1", "SYN", "CommunitySupported", "2026-01-01", "host"])
+            )
+        (bundle_dir / "commands" / "localcli_software-vib-list.txt").write_text(
+            "\n".join(lines) + "\n", encoding="utf-8"
+        )
 
     return bundle_dir
 

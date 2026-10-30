@@ -17,6 +17,7 @@ from vhealth.parsers import (
     smart,
     storage_core,
     system_version,
+    vib,
     vm_inventory,
     vmk_log,
 )
@@ -33,6 +34,7 @@ PARSER_MODULES = [
     hardware_inventory,
     ntp,
     coredump,
+    vib,
 ]
 
 PARSER_VERSIONS = {m.__name__.rsplit(".", 1)[-1]: m.VERSION for m in PARSER_MODULES}

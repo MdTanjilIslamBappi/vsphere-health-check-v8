@@ -56,6 +56,7 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
 | `commands/clusterAdmin_cluster-status.txt` | `hardware_inventory.py` | Host-reported cluster/compute-resource ID and local alarm state, where the file is present |
 | `commands/localcli_--formatterjson-system-ntp-get.txt` | `ntp.py` | NTP enabled/configured-server state and, separately, whether the host's clock is actually synchronized right now |
 | `commands/localcli_system-coredump-file-list.txt` | `coredump.py` | Whether a file-based kernel-coredump target is both active and configured |
+| `commands/localcli_software-vib-list.txt` | `vib.py` | Installed VIB acceptance levels; flags any `CommunitySupported` (unsupported by VMware GSS) VIB |
 
 ## Known gaps (not yet implemented)
 

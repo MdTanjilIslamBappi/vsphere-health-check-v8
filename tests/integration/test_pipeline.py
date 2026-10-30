@@ -79,6 +79,20 @@ def test_run_assessment_flags_host_with_coredump_not_configured(tmp_path):
     assert "hardware.coredump_not_configured" in rule_ids
 
 
+def test_run_assessment_flags_host_with_community_supported_vib(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz", community_supported_vibs=["my-community-driver"]
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    host = assessment.hosts[0]
+    assert host.vib_data_available is True
+    assert host.community_supported_vibs == ["my-community-driver"]
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "hardware.community_supported_vib_installed" in rule_ids
+
+
 def test_run_assessment_on_multi_host_vcenter_zip(tmp_path):
     bundle_path = build_vcenter_zip(
         tmp_path / "vc.zip", hostnames=["esxi-a.example.test", "esxi-b.example.test"]

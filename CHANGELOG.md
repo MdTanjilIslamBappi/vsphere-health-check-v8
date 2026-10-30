@@ -123,6 +123,16 @@ and the "Known limitations" section of [README.md](README.md)).
   against a real 10-host EAMSC2 bundle (all 10 correctly resolve as
   configured); the firing (not-configured) case has not yet been
   observed against real data and is covered by a synthetic test only.
+- `hardware.community_supported_vib_installed` rule and `vib.py`
+  parser: reads each ESXi host's own `localcli software vib list`
+  output and flags any VIB at the `CommunitySupported` acceptance
+  level, which VMware GSS does not provide support for. Surfaced as a
+  new "VIB Acceptance Level" row in the report's component-status
+  table. Table parsing confirmed against a real 10-host EAMSC2 bundle
+  (~99 VIBs per host, all `VMwareCertified`/`VMwareAccepted`/
+  `PartnerSupported`, zero `CommunitySupported`); the firing case has
+  not yet been observed against real data and is covered by a
+  synthetic test only.
 
 ### Fixed
 

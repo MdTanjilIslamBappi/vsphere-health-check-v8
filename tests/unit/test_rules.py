@@ -127,6 +127,20 @@ def test_coredump_configured_raises_no_finding(tmp_path):
     assert "hardware.coredump_not_configured" not in rule_ids
 
 
+def test_community_supported_vib_raises_finding(tmp_path):
+    host = _assessed_host(tmp_path, community_supported_vibs=["my-community-driver"])
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "hardware.community_supported_vib_installed" in rule_ids
+
+
+def test_no_community_supported_vib_raises_no_finding(tmp_path):
+    host = _assessed_host(tmp_path, community_supported_vibs=[])
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "hardware.community_supported_vib_installed" not in rule_ids
+
+
 def test_fleet_disabled_rules_are_excluded():
     host_a = HostInfo(hostname="host-a", bundle_source="a", cpu_model="Intel Xeon Gold 6258R")
     host_b = HostInfo(hostname="host-b", bundle_source="b", cpu_model="Intel Xeon Gold 6430")

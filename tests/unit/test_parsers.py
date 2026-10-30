@@ -13,6 +13,7 @@ from vhealth.parsers import (
     smart,
     storage_core,
     system_version,
+    vib,
     vm_inventory,
     vmk_log,
 )
@@ -203,6 +204,7 @@ def test_parsers_report_warnings_when_evidence_missing(tmp_path):
     assert vm_inventory.parse(empty_dir, host) != []
     assert ntp.parse(empty_dir, host) != []
     assert coredump.parse(empty_dir, host) != []
+    assert vib.parse(empty_dir, host) != []
 
 
 def test_hardware_inventory_parser_extracts_server_and_cpu_model(tmp_path):
@@ -272,3 +274,28 @@ def test_coredump_parser_reports_warning_when_file_missing(tmp_path):
     warnings = coredump.parse(host_dir, host)
     assert warnings != []
     assert host.coredump_data_available is False
+
+
+def test_vib_parser_extracts_community_supported_vibs(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path, community_supported_vibs=["my-community-driver"]
+    )
+    warnings = vib.parse(host_dir, host)
+    assert warnings == []
+    assert host.vib_data_available is True
+    assert host.community_supported_vibs == ["my-community-driver"]
+
+
+def test_vib_parser_reports_no_community_vibs_when_none_installed(tmp_path):
+    host_dir, host = _build_host(tmp_path, community_supported_vibs=[])
+    warnings = vib.parse(host_dir, host)
+    assert warnings == []
+    assert host.vib_data_available is True
+    assert host.community_supported_vibs == []
+
+
+def test_vib_parser_reports_warning_when_file_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = vib.parse(host_dir, host)
+    assert warnings != []
+    assert host.vib_data_available is False

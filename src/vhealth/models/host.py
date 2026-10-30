@@ -118,6 +118,11 @@ class HostInfo(BaseModel):
     coredump_data_available: bool = False
     coredump_configured: bool | None = None
     coredump_active_path: str | None = None
+    # Installed VIB acceptance levels (esxcli software vib list).
+    # ``CommunitySupported`` is the one level VMware GSS does not support
+    # issues on, so it is tracked by name rather than just a boolean.
+    vib_data_available: bool = False
+    community_supported_vibs: list[str] = Field(default_factory=list)
     sensors: list[HardwareSensor] = Field(default_factory=list)
     log_events: list[str] = Field(default_factory=list)
     log_signal_counts: dict[str, int] = Field(default_factory=dict)

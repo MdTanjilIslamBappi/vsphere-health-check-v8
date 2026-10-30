@@ -32,6 +32,7 @@ see "Adding a rule" below.
 | `fleet.cpu_model_mismatch` (**fleet rule**) | CPU | Multiple CPU models detected across assessed hosts | Medium | `cpu_model` (from `smbiosDump.txt`) on 2+ hosts in the assessment | Compares raw SMBIOS CPU model strings across hosts in this assessment only; has no visibility into actual vCenter cluster membership or EVC configuration, so it cannot tell you whether these hosts share a cluster or whether EVC already mitigates the mismatch. |
 | `hardware.ntp_not_synchronized` | Other | Host clock is not synchronized via NTP | Medium | `ntp_time_synchronized`, `ntp_servers` (from `esxcli system ntp get`) | Point-in-time snapshot from the bundle's capture moment only; a host that synced (or lost sync) before/after capture is not reflected. Does not distinguish "NTP service disabled" from "enabled but server unreachable" -- both surface as `Time Synchronized = false`. |
 | `hardware.coredump_not_configured` | Other | No active kernel-coredump target configured | Medium | `coredump_configured` (from `esxcli system coredump file list`) | Point-in-time snapshot at capture only. Implemented from documented esxcli behaviour; every real bundle seen so far has at least one `Active=true`/`Configured=true` row, so the firing (not-configured) case has not yet been observed against real-world data -- see below. |
+| `hardware.community_supported_vib_installed` | Other | Host has a CommunitySupported (unsupported) VIB installed | Medium | `community_supported_vibs` (from `esxcli software vib list`) | Only reports the acceptance level ESXi itself records; cannot see any separately-granted VMware GSS exception for a specific VIB in this environment. |
 
 ## Validation status
 
@@ -88,6 +89,15 @@ either an empty table or one with `Active=false`/`Configured=false`) is
 implemented from documented `esxcli` behaviour and covered by a
 synthetic unit test only, per the "Do not add a rule..." rule below,
 since no real bundle seen so far has a misconfigured coredump target.
+
+`hardware.community_supported_vib_installed`'s table parsing (`esxcli
+software vib list`, via the shared `parse_fixed_width_table` helper) was
+confirmed against the same real 10-host EAMSC2 bundle: each host lists
+~99 VIBs across exactly `VMwareCertified`/`VMwareAccepted`/
+`PartnerSupported`, with zero `CommunitySupported` entries anywhere, so
+the non-firing path is real-data-validated. The firing path has not yet
+been observed against real-world data and is covered by a synthetic
+unit test only.
 
 ## Adding a rule
 

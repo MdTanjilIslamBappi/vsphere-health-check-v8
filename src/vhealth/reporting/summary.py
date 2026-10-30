@@ -38,6 +38,7 @@ _SENSOR_RULE_IDS = {"hardware.ipmi_sensor_asserted"}
 _PROCESSOR_RULE_IDS = {"fleet.cpu_model_mismatch"}
 _NTP_RULE_IDS = {"hardware.ntp_not_synchronized"}
 _COREDUMP_RULE_IDS = {"hardware.coredump_not_configured"}
+_VIB_RULE_IDS = {"hardware.community_supported_vib_installed"}
 _STORAGE_HARDWARE_RULE_IDS = _DEVICE_HEALTH_RULE_IDS | _LOG_SIGNAL_RULE_IDS | _SENSOR_RULE_IDS
 
 NOT_ASSESSED = "Not assessed"
@@ -140,6 +141,13 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         else "Kernel-coredump target configuration -- not assessed; no coredump data "
         "found in this bundle"
     )
+    has_vib_data = any(h.vib_data_available for h in assessment.hosts)
+    vib_item = (
+        "Installed VIB acceptance levels (esxcli software vib list)"
+        if has_vib_data
+        else "Installed VIB acceptance levels -- not assessed; no VIB data found in "
+        "this bundle"
+    )
     if vcenter is None:
         return (
             "ESXi host status and diagnostic data availability",
@@ -151,6 +159,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
             "Cluster/compute-resource membership, where host-reported in the bundle",
             ntp_item,
             coredump_item,
+            vib_item,
             evc_item,
             datastore_item,
             vm_item,
@@ -168,6 +177,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         "vCenter operational logs in the capture",
         ntp_item,
         coredump_item,
+        vib_item,
         evc_item,
         datastore_item,
         vm_item,
@@ -387,6 +397,30 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
         ComponentStatus("Kernel Coredump Configuration", coredump_status, coredump_remark)
     )
 
+    hosts_with_vib_data = [h for h in hosts if h.vib_data_available]
+    if hosts_with_vib_data:
+        hosts_with_community_vibs = [h for h in hosts_with_vib_data if h.community_supported_vibs]
+        vib_findings = _by_ids(findings, _VIB_RULE_IDS)
+        vib_status = _status_label(_worst_severity(vib_findings)) if vib_findings else "Healthy"
+        if hosts_with_community_vibs:
+            vib_remark = (
+                f"{len(hosts_with_community_vibs)} of {len(hosts_with_vib_data)} host(s) "
+                "with VIB data have at least one CommunitySupported (unsupported) VIB "
+                f"installed: {', '.join(h.hostname for h in hosts_with_community_vibs)}."
+            )
+        else:
+            vib_remark = (
+                f"All {len(hosts_with_vib_data)} of {total} host(s) with VIB data have no "
+                "CommunitySupported VIBs installed."
+            )
+    else:
+        vib_status = NOT_ASSESSED
+        vib_remark = (
+            "Installed VIB acceptance levels -- not assessed; no VIB data (esxcli "
+            "software vib list) found in this bundle."
+        )
+    rows.append(ComponentStatus("VIB Acceptance Level", vib_status, vib_remark))
+
     storage_hw_findings = _by_ids(findings, _STORAGE_HARDWARE_RULE_IDS)
     rows.append(
         ComponentStatus(
@@ -524,6 +558,10 @@ def key_findings_at_a_glance(assessment: Assessment) -> list[str]:
     coredump_row = next(r for r in rows if r.component == "Kernel Coredump Configuration")
     if coredump_row.status != NOT_ASSESSED:
         items.append(coredump_row.remarks)
+
+    vib_row = next(r for r in rows if r.component == "VIB Acceptance Level")
+    if vib_row.status != NOT_ASSESSED:
+        items.append(vib_row.remarks)
 
     evc_row = next(r for r in rows if r.component == "EVC Mode")
     if evc_row.status != NOT_ASSESSED:
@@ -694,6 +732,14 @@ def detailed_observations(assessment: Assessment) -> list[str]:
             "coredump data have an active, configured kernel-coredump target."
         )
 
+    vib_hosts = [h for h in hosts if h.vib_data_available]
+    if vib_hosts:
+        with_community_vibs = sum(1 for h in vib_hosts if h.community_supported_vibs)
+        items.append(
+            f"{len(vib_hosts) - with_community_vibs} of {len(vib_hosts)} host(s) with VIB "
+            "data have no CommunitySupported VIBs installed."
+        )
+
     return items
 
 
@@ -715,6 +761,7 @@ _CATEGORY_BY_RULE_ID = {
     "fleet.cpu_model_mismatch": "CPU",
     "hardware.ntp_not_synchronized": "Other",
     "hardware.coredump_not_configured": "Other",
+    "hardware.community_supported_vib_installed": "Other",
     "coverage.limited_diagnostic_data": "Other",
     "vcenter.core_service_stopped": "vCenter",
     "vcenter.optional_service_stopped": "vCenter",
