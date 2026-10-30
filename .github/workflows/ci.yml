@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      - name: Install (clean checkout, locked dependencies)
+        shell: bash
+        run: |
+          uv venv --python ${{ matrix.python-version }} .venv
+          uv sync --locked --group dev
+
+      - name: Verify CLI version
+        shell: bash
+        run: uv run vhealth --version
+
+      - name: Lint
+        shell: bash
+        run: uv run ruff check .
+
+      - name: Run tests from the repository root
+        shell: bash
+        run: uv run pytest -q --cov=vhealth --cov-report=term-missing
+
+      - name: Run CLI from outside the repository (resource-loading check)
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/outside-repo"
+          cd "$RUNNER_TEMP/outside-repo"
+          "$GITHUB_WORKSPACE/.venv/bin/vhealth" --version || "$GITHUB_WORKSPACE/.venv/Scripts/vhealth.exe" --version

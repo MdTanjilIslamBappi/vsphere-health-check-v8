@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ config.report.title }}</title>
+<style>
+  :root {
+    --sev-critical: #b30000; --sev-high: #d9534f; --sev-medium: #e9a23b;
+    --sev-low: #5b8def; --sev-info: #6c757d;
+  }
+  body { font-family: -apple-system, Segoe UI, Arial, sans-serif; margin: 0; color: #1a1a1a; }
+  header { background: #1b2a4a; color: #fff; padding: 2rem; }
+  header h1 { margin: 0 0 0.25rem; font-size: 1.6rem; }
+  header .meta { opacity: 0.85; font-size: 0.9rem; }
+  main { max-width: 960px; margin: 0 auto; padding: 1.5rem 2rem 3rem; }
+  section { margin-bottom: 2.5rem; }
+  h2 { border-bottom: 2px solid #1b2a4a; padding-bottom: 0.3rem; }
+  table { width: 100%; border-collapse: collapse; margin: 0.75rem 0 1.5rem; font-size: 0.9rem; }
+  th, td { border: 1px solid #ddd; padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
+  th { background: #f3f4f6; }
+  .badge { display: inline-block; padding: 0.15rem 0.6rem; border-radius: 1rem; color: #fff;
+           font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+  .badge.critical { background: var(--sev-critical); }
+  .badge.high { background: var(--sev-high); }
+  .badge.medium { background: var(--sev-medium); }
+  .badge.low { background: var(--sev-low); }
+  .badge.info { background: var(--sev-info); }
+  .summary-counts { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .summary-counts div { flex: 1; min-width: 120px; border: 1px solid #ddd; border-radius: 6px;
+                         padding: 0.75rem 1rem; }
+  .summary-counts .count { font-size: 1.8rem; font-weight: 700; }
+  .finding { border: 1px solid #ddd; border-radius: 6px; padding: 1rem; margin-bottom: 0.75rem; }
+  .finding h3 { margin: 0.2rem 0; }
+  .evidence { background: #f8f9fa; border-left: 3px solid #999; padding: 0.5rem 0.75rem;
+              font-family: Consolas, monospace; font-size: 0.8rem; margin-top: 0.5rem; white-space: pre-wrap; }
+  .muted { color: #666; font-size: 0.85rem; }
+  footer { text-align: center; color: #888; font-size: 0.8rem; padding: 1.5rem; }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{ config.report.title }}</h1>
+  {% if config.report.company_name %}<div class="meta">{{ config.report.company_name }}</div>{% endif %}
+  <div class="meta">Generated {{ assessment.metadata.assessment_timestamp }} &middot;
+     vhealth {{ assessment.metadata.app_version }} &middot;
+     rule engine {{ assessment.metadata.rule_engine_version }}</div>
+  <div class="meta">Input: {{ assessment.metadata.input_filename }}
+     (sha256 {{ assessment.metadata.input_sha256[:16] }}&hellip;)</div>
+</header>
+<main>
+
+<section id="executive-summary">
+  <h2>1. Executive Summary</h2>
+  <div class="summary-counts">
+    {% for sev in ["critical", "high", "medium", "low", "info"] %}
+    <div>
+      <div class="count">{{ severity_counts.get(sev, 0) }}</div>
+      <div class="badge {{ sev }}">{{ sev }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  <p>{{ hosts|length }} ESXi host(s) were assessed from this support bundle.
+     {{ findings|length }} finding(s) were raised across {{ rule_count }} automated checks.</p>
+</section>
+
+<section id="scope">
+  <h2>2. Scope of Health Check</h2>
+  <p>This report was produced entirely offline from the customer-supplied diagnostic bundle below;
+     no connection was made to any vCenter Server, ESXi host, or external service.</p>
+  <table>
+    <tr><th>Input file</th><td>{{ assessment.metadata.input_filename }}</td></tr>
+    <tr><th>SHA-256</th><td>{{ assessment.metadata.input_sha256 }}</td></tr>
+    <tr><th>Hosts discovered</th><td>{{ hosts|length }}</td></tr>
+    <tr><th>Assessment schema</th><td>{{ assessment.metadata.schema_version }}</td></tr>
+  </table>
+  {% if assessment.metadata.processing_warnings %}
+  <p class="muted">Processing warnings ({{ assessment.metadata.processing_warnings|length }}):</p>
+  <ul class="muted">
+    {% for w in assessment.metadata.processing_warnings %}<li>{{ w.source }}: {{ w.message }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section id="system-status">
+  <h2>3. System Status</h2>
+
+  <h3>3.1 Current Hardware Status</h3>
+  {% for host in hosts %}
+  <h4>{{ host.hostname }}</h4>
+  <table>
+    <tr><th>ESXi version</th><td>{{ host.esxi_version or "unknown" }}</td></tr>
+    <tr><th>Build</th><td>{{ host.esxi_build or "unknown" }}</td></tr>
+    <tr><th>Captured on</th><td>{{ host.captured_on or "unknown" }}</td></tr>
+    <tr><th>Storage adapters</th><td>{{ host.storage_adapters|length }}</td></tr>
+    <tr><th>Storage devices</th><td>{{ host.storage_devices|length }}</td></tr>
+    <tr><th>Hardware sensors</th><td>{{ host.sensors|length }}</td></tr>
+  </table>
+  {% endfor %}
+
+  <h3>3.2 Current State Analysis of VMware Components</h3>
+  <p class="muted">Storage adapter and device inventory per host, as reported by
+     <code>esxcli storage core</code>.</p>
+  {% for host in hosts %}
+  <h4>{{ host.hostname }} &mdash; adapters</h4>
+  <table>
+    <tr><th>HBA</th><th>Driver</th><th>Description</th><th>Link state</th></tr>
+    {% for a in host.storage_adapters %}
+    <tr><td>{{ a.device }}</td><td>{{ a.driver }}</td><td>{{ a.description }}</td><td>{{ a.link_state }}</td></tr>
+    {% endfor %}
+  </table>
+  {% endfor %}
+
+  <h3>3.3 Current State Analysis of ESXi Hosts &mdash; Findings</h3>
+  {% for f in findings %}
+  <div class="finding">
+    <span class="badge {{ f.severity.value }}">{{ f.severity.value }}</span>
+    <h3>{{ f.title }}</h3>
+    <p class="muted">{{ f.rule_id }}{% if f.affected_host %} &middot; {{ f.affected_host }}{% endif %}
+       {% if f.affected_object %} &middot; {{ f.affected_object }}{% endif %}</p>
+    <p>{{ f.summary }}</p>
+    {% if f.remediation %}<p><strong>Remediation:</strong> {{ f.remediation }}</p>{% endif %}
+    {% if f.limitations %}<p class="muted"><strong>Limitations:</strong> {{ f.limitations }}</p>{% endif %}
+    {% if f.evidence %}<div class="evidence">{{ f.evidence|join("\n") }}</div>{% endif %}
+  </div>
+  {% else %}
+  <p>No findings were raised by the rule catalogue for this bundle.</p>
+  {% endfor %}
+
+  <h3>3.4 Recommendation</h3>
+  <p>Review each finding above in severity order. Critical and high-severity findings should be
+     investigated before the next maintenance window; medium/low findings should be tracked and
+     re-checked on the next assessment run.</p>
+</section>
+
+</main>
+<footer>
+  Generated offline by vhealth {{ assessment.metadata.app_version }}. No data from this bundle was
+  transmitted anywhere.
+</footer>
+</body>
+</html>

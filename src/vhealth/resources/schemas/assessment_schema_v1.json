@@ -1,0 +1,620 @@
+{
+  "$defs": {
+    "AssessmentMetadata": {
+      "description": "Execution metadata, kept separate from deterministic findings data.\n\nEverything here except ``assessment_timestamp`` is stable for a given\n(bundle, app version, rule catalogue, config) tuple, so two assessments\nof the same input can be diffed meaningfully.",
+      "properties": {
+        "schema_version": {
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "app_version": {
+          "title": "App Version",
+          "type": "string"
+        },
+        "rule_engine_version": {
+          "title": "Rule Engine Version",
+          "type": "string"
+        },
+        "parser_versions": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Parser Versions",
+          "type": "object"
+        },
+        "input_filename": {
+          "title": "Input Filename",
+          "type": "string"
+        },
+        "input_sha256": {
+          "title": "Input Sha256",
+          "type": "string"
+        },
+        "assessment_timestamp": {
+          "title": "Assessment Timestamp",
+          "type": "string"
+        },
+        "config_fingerprint": {
+          "title": "Config Fingerprint",
+          "type": "string"
+        },
+        "evidence_manifest": {
+          "items": {
+            "$ref": "#/$defs/EvidenceManifestEntry"
+          },
+          "title": "Evidence Manifest",
+          "type": "array"
+        },
+        "supported_format_coverage": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "title": "Supported Format Coverage",
+          "type": "object"
+        },
+        "processing_warnings": {
+          "items": {
+            "$ref": "#/$defs/ProcessingWarning"
+          },
+          "title": "Processing Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "app_version",
+        "rule_engine_version",
+        "input_filename",
+        "input_sha256",
+        "assessment_timestamp",
+        "config_fingerprint"
+      ],
+      "title": "AssessmentMetadata",
+      "type": "object"
+    },
+    "EvidenceManifestEntry": {
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "title": "Size Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes"
+      ],
+      "title": "EvidenceManifestEntry",
+      "type": "object"
+    },
+    "Finding": {
+      "description": "A single assessment finding produced by a rule.",
+      "properties": {
+        "rule_id": {
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "affected_host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Affected Host"
+        },
+        "affected_object": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Affected Object"
+        },
+        "remediation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Remediation"
+        },
+        "limitations": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limitations"
+        },
+        "references": {
+          "items": {
+            "type": "string"
+          },
+          "title": "References",
+          "type": "array"
+        }
+      },
+      "required": [
+        "rule_id",
+        "title",
+        "severity",
+        "summary"
+      ],
+      "title": "Finding",
+      "type": "object"
+    },
+    "HardwareSensor": {
+      "description": "An IPMI/SDR hardware sensor reading (fan, temp, voltage, PSU).",
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "reading": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reading"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        },
+        "sensor_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sensor Type"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "HardwareSensor",
+      "type": "object"
+    },
+    "HostInfo": {
+      "description": "Parsed, normalised data for a single ESXi host bundle.",
+      "properties": {
+        "hostname": {
+          "title": "Hostname",
+          "type": "string"
+        },
+        "bundle_source": {
+          "title": "Bundle Source",
+          "type": "string"
+        },
+        "esxi_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Esxi Version"
+        },
+        "esxi_build": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Esxi Build"
+        },
+        "captured_on": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Captured On"
+        },
+        "vm_support_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vm Support Version"
+        },
+        "storage_adapters": {
+          "items": {
+            "$ref": "#/$defs/StorageAdapter"
+          },
+          "title": "Storage Adapters",
+          "type": "array"
+        },
+        "storage_devices": {
+          "items": {
+            "$ref": "#/$defs/StorageDevice"
+          },
+          "title": "Storage Devices",
+          "type": "array"
+        },
+        "sensors": {
+          "items": {
+            "$ref": "#/$defs/HardwareSensor"
+          },
+          "title": "Sensors",
+          "type": "array"
+        },
+        "log_events": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Log Events",
+          "type": "array"
+        },
+        "log_signal_counts": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Log Signal Counts",
+          "type": "object"
+        },
+        "parse_warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Parse Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "hostname",
+        "bundle_source"
+      ],
+      "title": "HostInfo",
+      "type": "object"
+    },
+    "ProcessingWarning": {
+      "properties": {
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "message"
+      ],
+      "title": "ProcessingWarning",
+      "type": "object"
+    },
+    "Severity": {
+      "description": "Finding severity, ordered from least to most urgent.",
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "StorageAdapter": {
+      "description": "A storage HBA/RAID controller (esxcli storage core adapter).",
+      "properties": {
+        "device": {
+          "title": "Device",
+          "type": "string"
+        },
+        "driver": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Driver"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "link_state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Link State"
+        },
+        "uid": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uid"
+        }
+      },
+      "required": [
+        "device"
+      ],
+      "title": "StorageAdapter",
+      "type": "object"
+    },
+    "StorageDevice": {
+      "description": "A storage device/LUN (esxcli storage core device list).",
+      "properties": {
+        "device": {
+          "title": "Device",
+          "type": "string"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display Name"
+        },
+        "vendor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Vendor"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "is_ssd": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Is Ssd"
+        },
+        "is_local": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Is Local"
+        },
+        "size_mib": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size Mib"
+        },
+        "raid_level": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Raid Level"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        },
+        "multipath_plugin": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Multipath Plugin"
+        },
+        "smart_overall_health": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Smart Overall Health"
+        },
+        "smart_raw": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Smart Raw",
+          "type": "object"
+        }
+      },
+      "required": [
+        "device"
+      ],
+      "title": "StorageDevice",
+      "type": "object"
+    }
+  },
+  "description": "Top-level, versioned assessment result.",
+  "properties": {
+    "metadata": {
+      "$ref": "#/$defs/AssessmentMetadata"
+    },
+    "hosts": {
+      "items": {
+        "$ref": "#/$defs/HostInfo"
+      },
+      "title": "Hosts",
+      "type": "array"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/Finding"
+      },
+      "title": "Findings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "metadata"
+  ],
+  "title": "Assessment",
+  "type": "object",
+  "$id": "https://github.com/example/vmware-health-assessment/schemas/assessment_schema_v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

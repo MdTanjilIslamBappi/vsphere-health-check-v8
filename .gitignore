@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+offline-package/
+*.spec
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Never commit customer data or generated output
+*.zip
+*.tgz
+*.tar.gz
+/output/
+/samples/
+*.support-bundle
+
+.vscode/
+.idea/
