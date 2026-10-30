@@ -6,6 +6,7 @@ from vhealth.models.host import HostInfo
 from vhealth.parsers import (
     datastore,
     hardware_inventory,
+    ntp,
     readme,
     sensors,
     smart,
@@ -199,6 +200,7 @@ def test_parsers_report_warnings_when_evidence_missing(tmp_path):
     assert vmk_log.parse(empty_dir, host) != []
     assert hardware_inventory.parse(empty_dir, host) != []
     assert vm_inventory.parse(empty_dir, host) != []
+    assert ntp.parse(empty_dir, host) != []
 
 
 def test_hardware_inventory_parser_extracts_server_and_cpu_model(tmp_path):
@@ -224,3 +226,20 @@ def test_hardware_inventory_parser_extracts_cluster_membership(tmp_path):
     hardware_inventory.parse(host_dir, host)
     assert host.cluster_id == "domain-c1001"
     assert host.cluster_in_alarm is False
+
+
+def test_ntp_parser_extracts_sync_status_and_servers(tmp_path):
+    host_dir, host = _build_host(tmp_path, ntp_time_synchronized=False)
+    warnings = ntp.parse(host_dir, host)
+    assert warnings == []
+    assert host.ntp_data_available is True
+    assert host.ntp_enabled is True
+    assert host.ntp_time_synchronized is False
+    assert host.ntp_servers == ["10.10.18.24"]
+
+
+def test_ntp_parser_reports_warning_when_file_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = ntp.parse(host_dir, host)
+    assert warnings != []
+    assert host.ntp_data_available is False

@@ -24,6 +24,7 @@ def test_component_status_rows_marks_unassessed_vcenter_sections():
     assert rows["EVC Mode"].status == summary.NOT_ASSESSED
     assert rows["Datastores"].status == summary.NOT_ASSESSED
     assert rows["Virtual Machines"].status == summary.NOT_ASSESSED
+    assert rows["Time Synchronization (NTP)"].status == summary.NOT_ASSESSED
 
 
 def test_component_status_rows_reports_real_datastore_and_vm_data_when_present():
@@ -65,6 +66,45 @@ def test_component_status_rows_reports_evc_mask_evidence_from_vm_logs():
     assert rows["EVC Mode"].status != summary.NOT_ASSESSED
     assert "1 of 2" in rows["EVC Mode"].remarks
     assert "No EVC CPU-feature masking" in rows["EVC Mode"].remarks
+
+
+def test_component_status_rows_reports_ntp_not_synchronized():
+    from vhealth.models.findings import Finding, Severity
+
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        ntp_data_available=True,
+        ntp_time_synchronized=False,
+        ntp_servers=["10.10.18.24"],
+    )
+    finding = Finding(
+        rule_id="hardware.ntp_not_synchronized",
+        title="Host clock is not synchronized via NTP",
+        severity=Severity.MEDIUM,
+        summary="...",
+        affected_host="h1",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    ntp_row = rows["Time Synchronization (NTP)"]
+    assert ntp_row.status != summary.NOT_ASSESSED
+    assert "h1" in ntp_row.remarks
+    assert "Time Synchronized" in ntp_row.remarks
+
+
+def test_component_status_rows_reports_ntp_healthy_when_all_synced():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        ntp_data_available=True,
+        ntp_time_synchronized=True,
+        ntp_servers=["10.10.18.24"],
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    ntp_row = rows["Time Synchronization (NTP)"]
+    assert ntp_row.status == "Healthy"
 
 
 def test_virtual_machine_inventory_rows_resolve_datastore_name():

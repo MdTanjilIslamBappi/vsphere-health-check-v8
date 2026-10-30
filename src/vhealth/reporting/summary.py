@@ -36,6 +36,7 @@ _LOG_SIGNAL_RULE_IDS = {
 }
 _SENSOR_RULE_IDS = {"hardware.ipmi_sensor_asserted"}
 _PROCESSOR_RULE_IDS = {"fleet.cpu_model_mismatch"}
+_NTP_RULE_IDS = {"hardware.ntp_not_synchronized"}
 _STORAGE_HARDWARE_RULE_IDS = _DEVICE_HEALTH_RULE_IDS | _LOG_SIGNAL_RULE_IDS | _SENSOR_RULE_IDS
 
 NOT_ASSESSED = "Not assessed"
@@ -124,6 +125,13 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
     )
     if has_vm_inventory:
         vm_item += f". Powered-off VMs and resource utilization {_VCENTER_DB_FIELDS_UNAVAILABLE}"
+    has_ntp_data = any(h.ntp_data_available for h in assessment.hosts)
+    ntp_item = (
+        "Host clock/NTP time-synchronization status (esxcli system ntp get)"
+        if has_ntp_data
+        else "Host clock/NTP time-synchronization status -- not assessed; no NTP data "
+        "found in this bundle"
+    )
     if vcenter is None:
         return (
             "ESXi host status and diagnostic data availability",
@@ -133,6 +141,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
             "Server and CPU hardware inventory, including processor compatibility "
             "across hosts",
             "Cluster/compute-resource membership, where host-reported in the bundle",
+            ntp_item,
             evc_item,
             datastore_item,
             vm_item,
@@ -148,6 +157,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         f"appliance filesystem usage (vCenter bundle for {vcenter.hostname})",
         "Cluster inventory: cluster names and member hosts, as recovered from the "
         "vCenter operational logs in the capture",
+        ntp_item,
         evc_item,
         datastore_item,
         vm_item,
@@ -315,6 +325,30 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
         )
     rows.append(ComponentStatus("Virtual Machines", vms_status, vms_remark))
 
+    hosts_with_ntp_data = [h for h in hosts if h.ntp_data_available]
+    if hosts_with_ntp_data:
+        not_synced = [h for h in hosts_with_ntp_data if h.ntp_time_synchronized is False]
+        ntp_findings = _by_ids(findings, _NTP_RULE_IDS)
+        ntp_status = _status_label(_worst_severity(ntp_findings)) if ntp_findings else "Healthy"
+        if not_synced:
+            ntp_remark = (
+                f"{len(not_synced)} of {len(hosts_with_ntp_data)} host(s) with NTP data "
+                f"report 'Time Synchronized' = false: "
+                f"{', '.join(h.hostname for h in not_synced)}."
+            )
+        else:
+            ntp_remark = (
+                f"All {len(hosts_with_ntp_data)} of {total} host(s) with NTP data report "
+                "their clock as synchronized."
+            )
+    else:
+        ntp_status = NOT_ASSESSED
+        ntp_remark = (
+            "Time synchronization -- not assessed; no NTP data (esxcli system ntp get) "
+            "found in this bundle."
+        )
+    rows.append(ComponentStatus("Time Synchronization (NTP)", ntp_status, ntp_remark))
+
     storage_hw_findings = _by_ids(findings, _STORAGE_HARDWARE_RULE_IDS)
     rows.append(
         ComponentStatus(
@@ -445,6 +479,10 @@ def key_findings_at_a_glance(assessment: Assessment) -> list[str]:
             "Datastore and virtual machine data were not assessed from this bundle "
             "(see Scope of Health Check)."
         )
+    ntp_row = next(r for r in rows if r.component == "Time Synchronization (NTP)")
+    if ntp_row.status != NOT_ASSESSED:
+        items.append(ntp_row.remarks)
+
     evc_row = next(r for r in rows if r.component == "EVC Mode")
     if evc_row.status != NOT_ASSESSED:
         items.append(evc_row.remarks)
@@ -598,6 +636,14 @@ def detailed_observations(assessment: Assessment) -> list[str]:
     else:
         items.append("No storage or hardware findings were observed within the last 90 days.")
 
+    ntp_hosts = [h for h in hosts if h.ntp_data_available]
+    if ntp_hosts:
+        not_synced = sum(1 for h in ntp_hosts if h.ntp_time_synchronized is False)
+        items.append(
+            f"{len(ntp_hosts) - not_synced} of {len(ntp_hosts)} host(s) with NTP data report "
+            "their clock as synchronized."
+        )
+
     return items
 
 
@@ -617,6 +663,7 @@ _CATEGORY_BY_RULE_ID = {
     "storage.vob_problem_event": "Storage",
     "hardware.ipmi_sensor_asserted": "Hardware / SEL",
     "fleet.cpu_model_mismatch": "CPU",
+    "hardware.ntp_not_synchronized": "Other",
     "coverage.limited_diagnostic_data": "Other",
     "vcenter.core_service_stopped": "vCenter",
     "vcenter.optional_service_stopped": "vCenter",

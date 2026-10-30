@@ -30,6 +30,7 @@ see "Adding a rule" below.
 | `storage.vob_problem_event` | Storage | VMkernel Observation (VOB) flagged a storage problem event | Medium | `log_signal_counts.vob_storage_problem`, `log_events` | vobd only logs events ESXi itself classified as `esx.problem.*`; it is not a complete list of storage issues. Same 90-day quarterly scoping as PDL. |
 | `coverage.limited_diagnostic_data` | Other | Limited diagnostic data available in this support bundle | Low (Info if only 1-2 categories missing) | `coverage()` -- derived from `storage_adapters`/`storage_devices`/`smart_data`/`hardware_sensors`/`log_signals`/`hardware_inventory` presence | Reports what is missing, not why; cannot distinguish a reduced/incident-mode vm-support capture from hardware that genuinely has nothing to report (e.g. no local disks). |
 | `fleet.cpu_model_mismatch` (**fleet rule**) | CPU | Multiple CPU models detected across assessed hosts | Medium | `cpu_model` (from `smbiosDump.txt`) on 2+ hosts in the assessment | Compares raw SMBIOS CPU model strings across hosts in this assessment only; has no visibility into actual vCenter cluster membership or EVC configuration, so it cannot tell you whether these hosts share a cluster or whether EVC already mitigates the mismatch. |
+| `hardware.ntp_not_synchronized` | Other | Host clock is not synchronized via NTP | Medium | `ntp_time_synchronized`, `ntp_servers` (from `esxcli system ntp get`) | Point-in-time snapshot from the bundle's capture moment only; a host that synced (or lost sync) before/after capture is not reflected. Does not distinguish "NTP service disabled" from "enabled but server unreachable" -- both surface as `Time Synchronized = false`. |
 
 ## Validation status
 
@@ -70,6 +71,12 @@ within the 90-day window, so no exclusions occurred there; the exclusion
 path itself (an event older than 90 days being tallied in
 `log_signal_counts_excluded` instead of raising a finding) is covered by
 a synthetic unit test rather than observed in this specific real sample.
+
+`hardware.ntp_not_synchronized` was validated against a real 10-host
+EAMSC2 bundle: `localcli system ntp get` on `eamsc2esxi02` genuinely
+reports `"Time Synchronized": false` while the other 9 hosts in the same
+bundle all report `true`, so the rule correctly fires on exactly the one
+host with a real, currently-unresolved clock-sync problem.
 
 ## Adding a rule
 

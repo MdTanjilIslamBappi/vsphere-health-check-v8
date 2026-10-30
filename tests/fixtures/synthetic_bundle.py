@@ -88,6 +88,7 @@ def build_host_dir(
     datastore_name: str | None = None,
     vm_names: list[str] | None = None,
     vm_no_evc_masks: bool = False,
+    ntp_time_synchronized: bool | None = None,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -106,6 +107,11 @@ def build_host_dir(
     VMFS datastore backed by the synthetic SAN disk
     (``naa.6000000000000000000000000000001``), so a rule's output can be
     checked for the resolved datastore name instead of the bare device ID.
+
+    ``ntp_time_synchronized``, if given (True or False), adds an
+    ``esxcli system ntp get`` JSON dump reporting that sync state against
+    a synthetic configured server; left as ``None``, no NTP data is
+    written at all (NTP not assessed).
     """
     bundle_dir = root / f"esx-{hostname}-2026-01-15"
     (bundle_dir / "commands").mkdir(parents=True)
@@ -265,6 +271,20 @@ def build_host_dir(
         (bundle_dir / "commands" / "localcli_vm-process-list.txt").write_text(
             "\n".join(blocks), encoding="utf-8"
         )
+
+    if ntp_time_synchronized is not None:
+        ntp_dump = {
+            "Enabled": True,
+            "Log level": "warning",
+            "Servers": ["10.10.18.24"],
+            "Time Service Enabled": True,
+            "Time Synchronized": ntp_time_synchronized,
+        }
+        (
+            bundle_dir
+            / "commands"
+            / "localcli_--formatterjson-system-ntp-get.txt"
+        ).write_text(json.dumps(ntp_dump), encoding="utf-8")
 
     return bundle_dir
 

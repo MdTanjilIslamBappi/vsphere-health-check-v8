@@ -103,6 +103,14 @@ class HostInfo(BaseModel):
     datastores: list[Datastore] = Field(default_factory=list)
     virtual_machines: list[VirtualMachine] = Field(default_factory=list)
     vm_inventory_available: bool = False
+    # NTP time-synchronization status (esxcli system ntp get). ``ntp_enabled``
+    # and ``ntp_time_synchronized`` are distinct: a host can have the NTP
+    # service enabled and a server configured yet never actually sync (e.g.
+    # an unreachable server), which is exactly the condition worth flagging.
+    ntp_data_available: bool = False
+    ntp_enabled: bool | None = None
+    ntp_time_synchronized: bool | None = None
+    ntp_servers: list[str] = Field(default_factory=list)
     sensors: list[HardwareSensor] = Field(default_factory=list)
     log_events: list[str] = Field(default_factory=list)
     log_signal_counts: dict[str, int] = Field(default_factory=dict)

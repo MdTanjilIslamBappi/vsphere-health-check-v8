@@ -10,6 +10,7 @@ the rest of the assessment can proceed.
 from vhealth.parsers import (
     datastore,
     hardware_inventory,
+    ntp,
     readme,
     sensors,
     smart,
@@ -29,6 +30,7 @@ PARSER_MODULES = [
     sensors,
     vmk_log,
     hardware_inventory,
+    ntp,
 ]
 
 PARSER_VERSIONS = {m.__name__.rsplit(".", 1)[-1]: m.VERSION for m in PARSER_MODULES}

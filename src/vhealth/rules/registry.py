@@ -7,19 +7,21 @@ from vhealth.rules import (
     coverage_rules,
     fleet_rules,
     log_rules,
+    ntp_rules,
     sensor_rules,
     storage_rules,
     vcenter_rules,
 )
 from vhealth.rules.base import FleetRule, Rule
 
-RULE_ENGINE_VERSION = "1.3.0"
+RULE_ENGINE_VERSION = "1.4.0"
 
 ALL_RULES: list[Rule] = [
     *storage_rules.RULES,
     *sensor_rules.RULES,
     *log_rules.RULES,
     *coverage_rules.RULES,
+    *ntp_rules.RULES,
 ]
 
 ALL_FLEET_RULES: list[FleetRule] = [
