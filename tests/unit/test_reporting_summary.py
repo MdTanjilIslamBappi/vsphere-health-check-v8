@@ -366,6 +366,41 @@ def test_recommendation_groups_carry_host_tagged_evidence():
     assert groups[0].evidence == ["h1: [pdl_error] some log line"]
 
 
+def test_findings_by_category_groups_and_orders_for_the_findings_log():
+    findings = [
+        Finding(
+            rule_id="coverage.limited_diagnostic_data", title="Limited data",
+            severity=Severity.LOW, summary="...", affected_host="h2",
+        ),
+        Finding(
+            rule_id="storage.pdl_detected", title="PDL", severity=Severity.CRITICAL,
+            summary="...", affected_host="h1",
+        ),
+        Finding(
+            rule_id="storage.device_not_on", title="Device not on", severity=Severity.HIGH,
+            summary="...", affected_host="h1",
+        ),
+        Finding(
+            rule_id="network.vswitch_single_uplink", title="Single uplink",
+            severity=Severity.MEDIUM, summary="...", affected_host="h1",
+        ),
+    ]
+    assessment = Assessment(metadata=_metadata(), hosts=[], findings=findings)
+    grouped = summary.findings_by_category(assessment)
+    categories = [c for c, _ in grouped]
+    # Storage before Network before Other, per CATEGORY_DISPLAY_ORDER -- not
+    # insertion order, which would have put "Other" (limited data) first.
+    assert categories == ["Storage", "Network", "Other"]
+    storage_findings = next(fs for c, fs in grouped if c == "Storage")
+    # Within a category, worst severity first.
+    assert [f.title for f in storage_findings] == ["PDL", "Device not on"]
+
+
+def test_findings_by_category_is_empty_when_no_findings_were_raised():
+    assessment = Assessment(metadata=_metadata(), hosts=[], findings=[])
+    assert summary.findings_by_category(assessment) == []
+
+
 def test_executive_summary_text_reports_no_findings_honestly():
     assessment = Assessment(metadata=_metadata(), hosts=[], findings=[])
     text = summary.executive_summary_text(assessment)

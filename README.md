@@ -95,6 +95,13 @@ vhealth inspect --input support-bundle.zip
 # Run the full assessment and write JSON + reports
 vhealth assess --input support-bundle.zip --output ./out
 
+# Same thing, shortest form: positional paths, no flags needed
+vhealth assess support-bundle.zip ./out
+
+# Output directory can be left out entirely -- a temp folder is used
+# instead, and its path is printed at the end
+vhealth assess support-bundle.zip
+
 # Re-render reports from a saved assessment.json (no need to re-parse)
 vhealth report --assessment ./out/assessment.json --format docx,html --output ./out
 ```

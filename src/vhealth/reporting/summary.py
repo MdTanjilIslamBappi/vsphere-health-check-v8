@@ -847,6 +847,34 @@ _CATEGORY_BY_RULE_ID = {
 _DEFAULT_CATEGORY = "Other"
 _MAX_EVIDENCE_LINES_PER_GROUP = 5
 
+# Reader-friendly category order for the detailed findings log (see
+# ``findings_by_category`` below) -- storage and network issues are the
+# ones an engineer most often needs to act on first, "Other" always last.
+CATEGORY_DISPLAY_ORDER = ["Storage", "Network", "Hardware / SEL", "CPU", "vCenter", "Other"]
+
+
+def category_for_rule_id(rule_id: str) -> str:
+    return _CATEGORY_BY_RULE_ID.get(rule_id, _DEFAULT_CATEGORY)
+
+
+def findings_by_category(assessment: Assessment) -> list[tuple[str, list[Finding]]]:
+    """Group every raised finding by rule category, worst-severity-first within
+
+    each group, in ``CATEGORY_DISPLAY_ORDER``. Used by the companion detailed
+    findings log so a reader can jump straight to "Storage" or "Network"
+    instead of scanning one flat list sorted only by severity; the main
+    report's grouped Recommendation section already shows category per item
+    and is left as-is.
+    """
+    by_category: dict[str, list[Finding]] = {}
+    for finding in assessment.findings:
+        by_category.setdefault(category_for_rule_id(finding.rule_id), []).append(finding)
+    for findings in by_category.values():
+        findings.sort(key=lambda f: -f.severity.rank)
+    ordered = [c for c in CATEGORY_DISPLAY_ORDER if c in by_category]
+    ordered += sorted(c for c in by_category if c not in CATEGORY_DISPLAY_ORDER)
+    return [(c, by_category[c]) for c in ordered]
+
 
 @dataclass(frozen=True)
 class RecommendationGroup:

@@ -167,19 +167,34 @@ def inspect(input_path: Path) -> None:
 
 
 @main.command()
+@click.argument(
+    "input_arg",
+    required=False,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    metavar="BUNDLE_ZIP",
+)
+@click.argument(
+    "output_arg",
+    required=False,
+    type=click.Path(file_okay=False, path_type=Path),
+    metavar="[OUTPUT_DIR]",
+)
 @click.option(
     "--input",
-    "input_path",
-    required=True,
+    "input_opt",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    help="Path to the customer-supplied support bundle (.zip or .tgz).",
+    default=None,
+    help="Path to the customer-supplied support bundle (.zip or .tgz). "
+    "Can also be given as the first plain argument.",
 )
 @click.option(
     "--output",
-    "output_dir",
-    required=True,
+    "output_opt",
     type=click.Path(file_okay=False, path_type=Path),
-    help="Directory to write assessment.json and reports into.",
+    default=None,
+    help="Directory to write assessment.json and reports into. Can also be given "
+    "as the second plain argument. If not given at all, a new folder under the "
+    "system temp directory is used and its path is printed at the end.",
 )
 @click.option(
     "--config",
@@ -202,8 +217,10 @@ def inspect(input_path: Path) -> None:
 )
 @_authorship_options
 def assess(
-    input_path: Path,
-    output_dir: Path,
+    input_arg: Path | None,
+    output_arg: Path | None,
+    input_opt: Path | None,
+    output_opt: Path | None,
     config_path: Path | None,
     formats: str,
     keep_extracted: bool,
@@ -214,7 +231,26 @@ def assess(
     revision: str,
     revision_description: str,
 ) -> None:
-    """Run ingestion, parsing, correlation and rules, then write reports."""
+    """Run ingestion, parsing, correlation and rules, then write reports.
+
+    Simplest form, one line: `vhealth assess /path/to/support-bundle.zip
+    /path/to/output`. The output directory may be omitted entirely --
+    `vhealth assess /path/to/support-bundle.zip` -- in which case a new
+    folder under the system temp directory is used instead, and its path
+    is printed once the report is written.
+    """
+    input_path = input_opt or input_arg
+    if input_path is None:
+        raise click.UsageError(
+            "Missing the support bundle path. Example: "
+            "vhealth assess support-bundle.zip [output-dir]"
+        )
+
+    output_dir = output_opt or output_arg
+    output_was_defaulted = output_dir is None
+    if output_was_defaulted:
+        output_dir = Path(tempfile.mkdtemp(prefix="vhealth-report-"))
+
     authorship = _resolve_authorship(
         engineer_name, report_author, verifier_name, no_prompt, revision, revision_description
     )
@@ -244,6 +280,9 @@ def assess(
         f"Assessment complete: {len(assessment.hosts)} host(s), "
         f"{len(assessment.findings)} finding(s)."
     )
+    if output_was_defaulted:
+        click.echo("No output directory was given, so a temp folder was used.")
+    click.echo(f"Report location: {output_dir}")
     sys.exit(EXIT_OK)
 
 

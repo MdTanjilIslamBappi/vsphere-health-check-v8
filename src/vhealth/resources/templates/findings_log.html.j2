@@ -20,6 +20,7 @@
   .badge.medium { background: var(--sev-medium); }
   .badge.low { background: var(--sev-low); }
   .badge.info { background: var(--sev-info); }
+  h2.category { border-bottom: 2px solid #2d2d2d; padding-bottom: 0.25rem; margin-top: 2rem; }
   .finding { border: 1px solid #ddd; border-radius: 6px; padding: 1rem; margin-bottom: 0.75rem; }
   .finding h3 { margin: 0.2rem 0; }
   .evidence { background: #f8f9fa; border-left: 3px solid #999; padding: 0.5rem 0.75rem;
@@ -38,6 +39,8 @@
      rule engine {{ assessment.metadata.rule_engine_version }}</div>
 </header>
 <main>
+  {% for category, findings in findings_by_category %}
+  <h2 class="category">{{ category }} ({{ findings|length }})</h2>
   {% for f in findings %}
   <div class="finding">
     <span class="badge {{ f.severity.value }}">{{ f.severity.value }}</span>
@@ -49,6 +52,7 @@
     {% if f.limitations %}<p class="muted"><strong>Limitations:</strong> {{ f.limitations }}</p>{% endif %}
     {% if f.evidence %}<div class="evidence">{{ f.evidence|join("\n") }}</div>{% endif %}
   </div>
+  {% endfor %}
   {% else %}
   <p>No findings were raised by the checks that could run for this bundle.</p>
   {% endfor %}

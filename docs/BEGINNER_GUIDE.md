@@ -156,6 +156,22 @@ vhealth inspect --input path\to\your-bundle.zip
 vhealth assess --input path\to\your-bundle.zip --output .\out
 ```
 
+The bundle path and output folder can also be given as plain arguments,
+with no flags, which is the shortest way to run the whole tool in one
+line:
+
+```bash
+vhealth assess path\to\your-bundle.zip .\out
+```
+
+You can even leave the output folder out entirely -- a new folder under
+your system's temp directory is used instead, and its path is printed
+once the report is ready:
+
+```bash
+vhealth assess path\to\your-bundle.zip
+```
+
 If your bundle is a vCenter-style `.zip` containing several ESXi hosts
 (e.g. one export covering a whole cluster or site), this still produces
 **one** combined `report.html`/`report.docx` covering every host found
@@ -169,7 +185,10 @@ This writes, into the `out` folder:
 - `report.docx` — the same report; open this in Word (or LibreOffice)
 - `findings-log.html` / `findings-log.docx` — the full per-finding detail
   (evidence lines, remediation, limitations) behind the main report, as a
-  separate document so the main report stays a quick read
+  separate document so the main report stays a quick read; findings are
+  grouped under subsystem headers (Storage, Network, Hardware / SEL,
+  CPU, vCenter, Other) so you can jump straight to the area you care
+  about
 
 When it finishes it prints a one-line summary, e.g.:
 

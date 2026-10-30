@@ -168,6 +168,26 @@ and the "Known limitations" section of [README.md](README.md)).
   down to a single uplink each (every other host has two), and hosts
   `eamsc2esxi14`/`eamsc2esxi15` each separately down to one uplink on
   a fourth DVS -- five genuine, previously-unreported redundancy gaps.
+- The companion `findings-log.docx`/`findings-log.html` (the detailed,
+  per-finding document separate from the main executive report) now
+  groups its findings under category headers (Storage, Network,
+  Hardware / SEL, CPU, vCenter, Other -- `findings_by_category()` in
+  `reporting/summary.py`, reusing the same category map the main
+  report's Recommendation section already assigns per item) instead of
+  one flat list sorted only by severity, so a reader can jump straight
+  to the subsystem they care about. Verified against the real 10-host
+  EAMSC2 bundle: its 47 findings split into Storage (34), Network (5),
+  CPU (1), vCenter (2), and Other (5) sections.
+- `vhealth assess` now also accepts the bundle path and output
+  directory as plain positional arguments (`vhealth assess
+  support-bundle.zip [output-dir]`) alongside the existing `--input`/
+  `--output` flags, and the output directory is now optional: if
+  omitted entirely, a new folder under the system temp directory is
+  used instead and its path is printed as `Report location: ...` once
+  the report is written, so the whole tool can be driven with one line
+  without first deciding where output should go. Verified by running
+  this exact one-line form against the real 4.6GB EAMSC2 bundle end to
+  end (extraction through report generation).
 
 ### Fixed
 

@@ -50,6 +50,35 @@ def test_assess_html_only(tmp_path):
     assert not (output_dir / "report.docx").is_file()
 
 
+def test_assess_accepts_positional_bundle_and_output_paths(tmp_path):
+    bundle_path = build_tgz(tmp_path / "host.tgz")
+    output_dir = tmp_path / "out"
+    result = CliRunner().invoke(main, ["assess", str(bundle_path), str(output_dir)])
+    assert result.exit_code == 0, result.output
+    assert (output_dir / "assessment.json").is_file()
+    assert f"Report location: {output_dir}" in result.output
+
+
+def test_assess_defaults_output_to_a_temp_dir_when_omitted(tmp_path, monkeypatch):
+    bundle_path = build_tgz(tmp_path / "host.tgz")
+    fake_tmp_root = tmp_path / "fake-tmp"
+    fake_tmp_root.mkdir()
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(fake_tmp_root))
+
+    result = CliRunner().invoke(main, ["assess", str(bundle_path)])
+    assert result.exit_code == 0, result.output
+    assert "No output directory was given" in result.output
+    written = list(fake_tmp_root.glob("vhealth-report-*/assessment.json"))
+    assert len(written) == 1
+    assert f"Report location: {written[0].parent}" in result.output
+
+
+def test_assess_without_any_bundle_path_fails_with_a_clear_usage_error():
+    result = CliRunner().invoke(main, ["assess"])
+    assert result.exit_code != 0
+    assert "Missing the support bundle path" in result.output
+
+
 def test_report_regenerates_from_saved_assessment(tmp_path):
     bundle_path = build_tgz(tmp_path / "host.tgz")
     assess_dir = tmp_path / "out"

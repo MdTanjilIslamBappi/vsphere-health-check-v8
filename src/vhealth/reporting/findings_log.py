@@ -21,6 +21,7 @@ from jinja2 import Environment
 from vhealth.config import AssessmentConfig
 from vhealth.models.assessment import Assessment
 from vhealth.models.findings import Severity
+from vhealth.reporting import summary
 from vhealth.reporting.authorship import ReportAuthorship
 
 VERSION = "1.0.0"
@@ -63,34 +64,36 @@ def write_docx_findings_log(
     ).font.size = Pt(9)
     doc.add_page_break()
 
-    findings = sorted(assessment.findings, key=lambda f: -f.severity.rank)
-    if not findings:
+    grouped = summary.findings_by_category(assessment)
+    if not grouped:
         doc.add_paragraph("No findings were raised by the checks that could run for this bundle.")
-    for finding in findings:
-        heading = doc.add_paragraph()
-        run = heading.add_run(f"[{finding.severity.value.upper()}] {finding.title}")
-        run.bold = True
-        run.font.color.rgb = _SEVERITY_COLOR[finding.severity]
+    for category, findings in grouped:
+        doc.add_heading(f"{category} ({len(findings)})", level=1)
+        for finding in findings:
+            heading = doc.add_paragraph()
+            run = heading.add_run(f"[{finding.severity.value.upper()}] {finding.title}")
+            run.bold = True
+            run.font.color.rgb = _SEVERITY_COLOR[finding.severity]
 
-        meta_line = finding.rule_id
-        if finding.affected_host:
-            meta_line += f" · {finding.affected_host}"
-        if finding.affected_object:
-            meta_line += f" · {finding.affected_object}"
-        meta_p = doc.add_paragraph()
-        meta_p.add_run(meta_line).italic = True
+            meta_line = finding.rule_id
+            if finding.affected_host:
+                meta_line += f" · {finding.affected_host}"
+            if finding.affected_object:
+                meta_line += f" · {finding.affected_object}"
+            meta_p = doc.add_paragraph()
+            meta_p.add_run(meta_line).italic = True
 
-        doc.add_paragraph(finding.summary)
-        if finding.remediation:
-            p = doc.add_paragraph()
-            p.add_run("Remediation: ").bold = True
-            p.add_run(finding.remediation)
-        if finding.limitations:
-            p = doc.add_paragraph()
-            p.add_run("Limitations: ").bold = True
-            p.add_run(finding.limitations)
-        for line in finding.evidence:
-            doc.add_paragraph(line, style="Intense Quote")
+            doc.add_paragraph(finding.summary)
+            if finding.remediation:
+                p = doc.add_paragraph()
+                p.add_run("Remediation: ").bold = True
+                p.add_run(finding.remediation)
+            if finding.limitations:
+                p = doc.add_paragraph()
+                p.add_run("Limitations: ").bold = True
+                p.add_run(finding.limitations)
+            for line in finding.evidence:
+                doc.add_paragraph(line, style="Intense Quote")
 
     if assessment.metadata.processing_warnings:
         doc.add_page_break()
@@ -117,6 +120,6 @@ def write_html_findings_log(
         assessment=assessment,
         config=config,
         authorship=authorship or ReportAuthorship(),
-        findings=sorted(assessment.findings, key=lambda f: -f.severity.rank),
+        findings_by_category=summary.findings_by_category(assessment),
     )
     output_path.write_text(html, encoding="utf-8")
