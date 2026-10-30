@@ -2,7 +2,7 @@ from synthetic_bundle import build_host_dir
 
 from vhealth.models.host import HostInfo
 from vhealth.parsers import PARSER_MODULES
-from vhealth.rules import evaluate_all
+from vhealth.rules import evaluate_all, evaluate_all_fleet
 
 
 def _assessed_host(tmp_path, **kwargs) -> HostInfo:
@@ -56,10 +56,40 @@ def test_minimal_capture_host_raises_coverage_finding(tmp_path):
     coverage_findings = [f for f in findings if f.rule_id == "coverage.limited_diagnostic_data"]
     assert len(coverage_findings) == 1
     assert coverage_findings[0].severity.value == "low"
-    assert len(coverage_findings[0].evidence) == 5
+    assert len(coverage_findings[0].evidence) == 6
 
 
 def test_disabled_rules_are_excluded(tmp_path):
     host = _assessed_host(tmp_path, smart_health="FAILED")
     findings = evaluate_all([host], disabled_rules=("storage.smart_health_not_ok",))
     assert "storage.smart_health_not_ok" not in {f.rule_id for f in findings}
+
+
+def test_single_host_raises_no_cpu_mismatch_finding(tmp_path):
+    host = _assessed_host(tmp_path)
+    findings = evaluate_all_fleet([host])
+    assert findings == []
+
+
+def test_mismatched_cpu_models_raise_fleet_finding():
+    host_a = HostInfo(hostname="host-a", bundle_source="a", cpu_model="Intel Xeon Gold 6258R")
+    host_b = HostInfo(hostname="host-b", bundle_source="b", cpu_model="Intel Xeon Gold 6430")
+    findings = evaluate_all_fleet([host_a, host_b])
+    assert len(findings) == 1
+    assert findings[0].rule_id == "fleet.cpu_model_mismatch"
+    assert findings[0].severity.value == "medium"
+
+
+def test_matching_cpu_models_raise_no_fleet_finding():
+    host_a = HostInfo(hostname="host-a", bundle_source="a", cpu_model="Intel Xeon Gold 6258R")
+    host_b = HostInfo(hostname="host-b", bundle_source="b", cpu_model="Intel Xeon Gold 6258R")
+    assert evaluate_all_fleet([host_a, host_b]) == []
+
+
+def test_fleet_disabled_rules_are_excluded():
+    host_a = HostInfo(hostname="host-a", bundle_source="a", cpu_model="Intel Xeon Gold 6258R")
+    host_b = HostInfo(hostname="host-b", bundle_source="b", cpu_model="Intel Xeon Gold 6430")
+    findings = evaluate_all_fleet(
+        [host_a, host_b], disabled_rules=("fleet.cpu_model_mismatch",)
+    )
+    assert findings == []

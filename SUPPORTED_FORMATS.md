@@ -51,6 +51,9 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
 | `commands/localcli_hardware-ipmi-sdr-list--p--i--n-all.txt` | `sensors.py` | IPMI hardware sensors (fan/temp/voltage/PSU) |
 | `var/run/log/vmkwarning.{0..7}.gz` | `vmk_log.py` | PDL/APD/dead-path/ALUA warning signals |
 | `var/run/log/vobd.{0..7}.gz` | `vmk_log.py` | `esx.problem.*` VOB events |
+| `commands/smbiosDump.txt` | `hardware_inventory.py` | Server manufacturer/model, CPU model, CPU socket count |
+| `commands/esxcfg-vmknic_-l.txt` | `hardware_inventory.py` | Management IP (the `vmk0` VMkernel NIC, by convention -- see below) |
+| `commands/clusterAdmin_cluster-status.txt` | `hardware_inventory.py` | Host-reported cluster/compute-resource ID and local alarm state, where the file is present |
 
 ## Known gaps (not yet implemented)
 
@@ -70,9 +73,18 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
   `hpssacli`/`ssacli`) are not parsed; this tool reads what `vm-support`
   captures via `esxcli`/IPMI, not vendor-specific RAID CLI output, which
   `vm-support` does not run by default.
-- **vCenter-side data** (vSAN health, cluster/HA config, vpxd logs) in a
-  vCenter support bundle is not parsed; only the per-host ESXi `vm-support`
-  members inside it are.
+- **vCenter-side data** (vSAN health, EVC/cluster/HA configuration, vpxd
+  logs, vCenter alarms, VM-level state) in a vCenter support bundle is not
+  parsed; only the per-host ESXi `vm-support` members inside it are. The
+  `clusterAdmin_cluster-status.txt` cluster ID parsed by
+  `hardware_inventory.py` is a host-reported fact (which compute resource
+  this host currently thinks it belongs to), not a read of vCenter's
+  actual cluster/EVC/HA configuration -- the report's "3.5 Not Assessed
+  From This Bundle" section spells out this distinction.
+- **Management IP selection** in `hardware_inventory.py` assumes `vmk0` is
+  the management VMkernel NIC, which is the common ESXi convention but not
+  a guarantee -- a host reconfigured to manage over a different vmknic
+  will show the wrong IP (or none, if `vmk0` doesn't exist).
 
 ## Windows-specific behaviour
 

@@ -3,7 +3,15 @@ from pathlib import Path
 from synthetic_bundle import build_host_dir
 
 from vhealth.models.host import HostInfo
-from vhealth.parsers import readme, sensors, smart, storage_core, system_version, vmk_log
+from vhealth.parsers import (
+    hardware_inventory,
+    readme,
+    sensors,
+    smart,
+    storage_core,
+    system_version,
+    vmk_log,
+)
 
 
 def _build_host(tmp_path, **kwargs) -> tuple[Path, HostInfo]:
@@ -89,3 +97,29 @@ def test_parsers_report_warnings_when_evidence_missing(tmp_path):
     assert smart.parse(empty_dir, host) != []
     assert sensors.parse(empty_dir, host) != []
     assert vmk_log.parse(empty_dir, host) != []
+    assert hardware_inventory.parse(empty_dir, host) != []
+
+
+def test_hardware_inventory_parser_extracts_server_and_cpu_model(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path, server_model="PowerEdge R740xd", cpu_model="Intel(R) Xeon(R) Gold 6258R @ 2.70GHz"
+    )
+    warnings = hardware_inventory.parse(host_dir, host)
+    assert warnings == []
+    assert host.server_manufacturer == "Synthetic Inc."
+    assert host.server_model == "PowerEdge R740xd"
+    assert host.cpu_model == "Intel(R) Xeon(R) Gold 6258R @ 2.70GHz"
+    assert host.cpu_sockets == 2
+
+
+def test_hardware_inventory_parser_extracts_management_ip(tmp_path):
+    host_dir, host = _build_host(tmp_path, management_ip="10.1.2.3")
+    hardware_inventory.parse(host_dir, host)
+    assert host.management_ip == "10.1.2.3"
+
+
+def test_hardware_inventory_parser_extracts_cluster_membership(tmp_path):
+    host_dir, host = _build_host(tmp_path, cluster_id="domain-c1001")
+    hardware_inventory.parse(host_dir, host)
+    assert host.cluster_id == "domain-c1001"
+    assert host.cluster_in_alarm is False

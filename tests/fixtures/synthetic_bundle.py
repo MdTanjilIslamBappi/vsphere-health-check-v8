@@ -39,6 +39,36 @@ _SDR_LIST = """Node-Sensor  Description                        Entity-Instance  
 0.2          PS1 PG FAIL                        7.1              {ps1_state}        assert-discrete      1            Power Supply                 2026-01-15T10:00:00       02   02
 """
 
+_SMBIOS_DUMP = """Dumping live SMBIOS data!
+SMBIOS version 3.2
+  System Info (Type 1): #256
+    Manufacturer: "{server_manufacturer}"
+    Product: "{server_model}"
+    Serial: "SYN0001"
+  Processor Info (Type 4): #1024
+    Socket: "CPU1"
+    Socket Status: Populated, Enabled
+    Manufacturer: "{cpu_manufacturer}"
+    Version: "{cpu_model}"
+  Processor Info (Type 4): #1025
+    Socket: "CPU2"
+    Socket Status: Populated, Enabled
+    Manufacturer: "{cpu_manufacturer}"
+    Version: "{cpu_model}"
+"""
+
+_VMKNIC_LIST = """Interface  Port Group/DVPort/Opaque Network        IP Family IP Address                              Netmask         Broadcast       MAC Address       MTU     TSO MSS   Enabled Type                NetStack
+vmk0       9                                       IPv4      {management_ip}                           255.255.255.0   {management_ip}  00:50:56:00:00:01 1500    65535     true    STATIC              defaultTcpipStack
+"""
+
+_CLUSTER_STATUS = """{{
+   "state": "hosted",
+   "cluster_id": "{cluster_id}",
+   "is_in_alarm": {in_alarm},
+   "is_in_cluster": true
+}}
+"""
+
 
 def build_host_dir(
     root: Path,
@@ -47,6 +77,13 @@ def build_host_dir(
     sensor_asserted: bool = False,
     include_pdl_warning: bool = False,
     minimal_capture: bool = False,
+    server_manufacturer: str = "Synthetic Inc.",
+    server_model: str = "SynthServer R1",
+    cpu_manufacturer: str = "Intel",
+    cpu_model: str = "Intel(R) Xeon(R) Gold 6258R CPU @ 2.70GHz",
+    management_ip: str = "192.168.100.10",
+    cluster_id: str = "cluster-synthetic-01",
+    cluster_in_alarm: bool = False,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -146,6 +183,25 @@ def build_host_dir(
         f.write("".join(vmkwarning_lines).encode("utf-8"))
     with gzip.open(bundle_dir / "var" / "run" / "log" / "vobd.0.gz", "wb") as f:
         f.write(b"2026-01-15T10:00:00.000Z In(14) vobd[1]:  routine startup message\n")
+
+    (bundle_dir / "commands" / "smbiosDump.txt").write_text(
+        _SMBIOS_DUMP.format(
+            server_manufacturer=server_manufacturer,
+            server_model=server_model,
+            cpu_manufacturer=cpu_manufacturer,
+            cpu_model=cpu_model,
+        ),
+        encoding="utf-8",
+    )
+    (bundle_dir / "commands" / "esxcfg-vmknic_-l.txt").write_text(
+        _VMKNIC_LIST.format(management_ip=management_ip), encoding="utf-8"
+    )
+    (bundle_dir / "commands" / "clusterAdmin_cluster-status.txt").write_text(
+        _CLUSTER_STATUS.format(
+            cluster_id=cluster_id, in_alarm="true" if cluster_in_alarm else "false"
+        ),
+        encoding="utf-8",
+    )
 
     return bundle_dir
 

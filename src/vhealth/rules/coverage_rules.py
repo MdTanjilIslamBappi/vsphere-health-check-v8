@@ -25,6 +25,7 @@ _HEALTH_CATEGORIES = {
     "smart_data": "SMART disk health data (smartinfo.txt)",
     "hardware_sensors": "IPMI hardware sensor readings",
     "log_signals": "vmkwarning/vobd storage log signals",
+    "hardware_inventory": "server/CPU model identity (smbiosDump.txt)",
 }
 
 

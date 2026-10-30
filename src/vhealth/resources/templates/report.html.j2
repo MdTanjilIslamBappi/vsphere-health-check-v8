@@ -5,8 +5,10 @@
 <title>{{ config.report.title }}</title>
 <style>
   :root {
-    --sev-critical: #b30000; --sev-high: #d9534f; --sev-medium: #e9a23b;
+    --sev-critical: #b30000; --sev-high: #d9534f; --sev-medium: #c77c00;
     --sev-low: #5b8def; --sev-info: #6c757d;
+    --status-healthy: #1e7e34; --status-informational: #5b8def;
+    --status-advisory: #c77c00; --status-attention: #b30000; --status-notassessed: #6c757d;
   }
   body { font-family: -apple-system, Segoe UI, Arial, sans-serif; margin: 0; color: #1a1a1a; }
   header { background: #1b2a4a; color: #fff; padding: 2rem; }
@@ -25,6 +27,12 @@
   .badge.medium { background: var(--sev-medium); }
   .badge.low { background: var(--sev-low); }
   .badge.info { background: var(--sev-info); }
+  .status { font-weight: 700; }
+  .status.healthy { color: var(--status-healthy); }
+  .status.informational { color: var(--status-informational); }
+  .status.advisory { color: var(--status-advisory); }
+  .status.attention-needed { color: var(--status-attention); }
+  .status.not-assessed { color: var(--status-notassessed); }
   .summary-counts { display: flex; gap: 1rem; flex-wrap: wrap; }
   .summary-counts div { flex: 1; min-width: 120px; border: 1px solid #ddd; border-radius: 6px;
                          padding: 0.75rem 1rem; }
@@ -34,6 +42,8 @@
   .evidence { background: #f8f9fa; border-left: 3px solid #999; padding: 0.5rem 0.75rem;
               font-family: Consolas, monospace; font-size: 0.8rem; margin-top: 0.5rem; white-space: pre-wrap; }
   .muted { color: #666; font-size: 0.85rem; }
+  .toc a { color: #1b2a4a; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
   footer { text-align: center; color: #888; font-size: 0.8rem; padding: 1.5rem; }
 </style>
 </head>
@@ -56,6 +66,37 @@
 </header>
 <main>
 
+<section id="version-history">
+  <h2>Version History</h2>
+  <table>
+    <tr><th>Date</th><th>Rev.</th><th>Author</th><th>Description</th></tr>
+    <tr>
+      <td>{{ assessment.metadata.assessment_timestamp.split("T")[0] }}</td>
+      <td>{{ authorship.revision }}</td>
+      <td>{{ authorship.author or authorship.engineer_name or "" }}</td>
+      <td>{{ authorship.description }}</td>
+    </tr>
+  </table>
+</section>
+
+<section id="contents" class="toc">
+  <h2>Contents</h2>
+  <ul>
+    <li><a href="#executive-summary">1. Executive Summary</a></li>
+    <li><a href="#scope">2. Scope of Health Check</a></li>
+    <li><a href="#system-status">3. System Status</a>
+      <ul>
+        <li><a href="#hardware-status">3.1 Current Hardware Status</a></li>
+        <li><a href="#component-status">3.2 Current State Analysis of VMware Components</a></li>
+        <li><a href="#host-inventory">3.3 Current State Analysis of ESXi Hosts</a></li>
+        <li><a href="#detailed-findings">3.4 Detailed Findings</a></li>
+        <li><a href="#not-assessed">3.5 Not Assessed From This Bundle</a></li>
+        <li><a href="#recommendation">3.6 Recommendation</a></li>
+      </ul>
+    </li>
+  </ul>
+</section>
+
 <section id="executive-summary">
   <h2>1. Executive Summary</h2>
   <div class="summary-counts">
@@ -66,7 +107,8 @@
     </div>
     {% endfor %}
   </div>
-  <p>{{ hosts|length }} ESXi host(s) were assessed from this support bundle.
+  <p>{{ executive_summary }}</p>
+  <p class="muted">{{ hosts|length }} ESXi host(s) were assessed from this support bundle.
      {{ findings|length }} finding(s) were raised across {{ rule_count }} automated checks.</p>
 </section>
 
@@ -80,6 +122,10 @@
     <tr><th>Hosts discovered</th><td>{{ hosts|length }}</td></tr>
     <tr><th>Assessment schema</th><td>{{ assessment.metadata.schema_version }}</td></tr>
   </table>
+  <p><strong>Checked by this assessment:</strong></p>
+  <ul>{% for item in scope_checked %}<li>{{ item }}</li>{% endfor %}</ul>
+  <p><strong>Not checked by this assessment</strong> (see Section 3.5):</p>
+  <ul>{% for item in scope_not_assessed %}<li>{{ item }}</li>{% endfor %}</ul>
   {% if assessment.metadata.processing_warnings %}
   <p class="muted">Processing warnings ({{ assessment.metadata.processing_warnings|length }}):</p>
   <ul class="muted">
@@ -91,33 +137,44 @@
 <section id="system-status">
   <h2>3. System Status</h2>
 
-  <h3>3.1 Current Hardware Status</h3>
-  {% for host in hosts %}
-  <h4>{{ host.hostname }}</h4>
+  <h3 id="hardware-status">3.1 Current Hardware Status</h3>
   <table>
-    <tr><th>ESXi version</th><td>{{ host.esxi_version or "unknown" }}</td></tr>
-    <tr><th>Build</th><td>{{ host.esxi_build or "unknown" }}</td></tr>
-    <tr><th>Captured on</th><td>{{ host.captured_on or "unknown" }}</td></tr>
-    <tr><th>Storage adapters</th><td>{{ host.storage_adapters|length }}</td></tr>
-    <tr><th>Storage devices</th><td>{{ host.storage_devices|length }}</td></tr>
-    <tr><th>Hardware sensors</th><td>{{ host.sensors|length }}</td></tr>
-  </table>
-  {% endfor %}
-
-  <h3>3.2 Current State Analysis of VMware Components</h3>
-  <p class="muted">Storage adapter and device inventory per host, as reported by
-     <code>esxcli storage core</code>.</p>
-  {% for host in hosts %}
-  <h4>{{ host.hostname }} &mdash; adapters</h4>
-  <table>
-    <tr><th>HBA</th><th>Driver</th><th>Description</th><th>Link state</th></tr>
-    {% for a in host.storage_adapters %}
-    <tr><td>{{ a.device }}</td><td>{{ a.driver }}</td><td>{{ a.description }}</td><td>{{ a.link_state }}</td></tr>
+    <tr><th>Category</th><th>Status</th></tr>
+    {% for row in hardware_status_rows %}
+    <tr><td>{{ row.label }}</td><td class="status {{ row.status|lower|replace(' ', '-') }}">{{ row.status }}</td></tr>
     {% endfor %}
   </table>
-  {% endfor %}
+  <p class="muted">Derived from the storage, SMART, and IPMI sensor findings in this assessment.
+     &ldquo;Management Connection Status&rdquo; requires live vCenter/ESXi connectivity and is not
+     assessed from a static bundle.</p>
 
-  <h3>3.3 Current State Analysis of ESXi Hosts &mdash; Findings</h3>
+  <h3 id="component-status">3.2 Current State Analysis of VMware Components</h3>
+  <table>
+    <tr><th>Component</th><th>Status</th><th>Remarks</th></tr>
+    {% for row in component_status_rows %}
+    <tr>
+      <td>{{ row.component }}</td>
+      <td class="status {{ row.status|lower|replace(' ', '-') }}">{{ row.status }}</td>
+      <td>{{ row.remarks }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h3 id="host-inventory">3.3 Current State Analysis of ESXi Hosts</h3>
+  <table>
+    <tr><th>S.No</th><th>Server Name</th><th>Management IP</th><th>Server Model</th><th>CPU Model</th></tr>
+    {% for row in host_inventory_rows %}
+    <tr>
+      <td>{{ row.index }}</td>
+      <td>{{ row.hostname }}</td>
+      <td>{{ row.management_ip }}</td>
+      <td>{{ row.server_model }}</td>
+      <td>{{ row.cpu_model }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h3 id="detailed-findings">3.4 Detailed Findings</h3>
   {% for f in findings %}
   <div class="finding">
     <span class="badge {{ f.severity.value }}">{{ f.severity.value }}</span>
@@ -133,10 +190,35 @@
   <p>No findings were raised by the rule catalogue for this bundle.</p>
   {% endfor %}
 
-  <h3>3.4 Recommendation</h3>
-  <p>Review each finding above in severity order. Critical and high-severity findings should be
-     investigated before the next maintenance window; medium/low findings should be tracked and
-     re-checked on the next assessment run.</p>
+  <h3 id="not-assessed">3.5 Not Assessed From This Bundle</h3>
+  <p>The items below require data this tool cannot get from an ESXi vm-support bundle
+     (EVC/cluster configuration, vCenter alarms, VM-level state) &mdash; they need a live vCenter
+     connection or a vCenter-side export instead. They are listed here, rather than omitted, so a
+     reviewer can see exactly what still needs checking manually, or strike any that don't apply.</p>
+  <ul>{% for item in scope_not_assessed %}<li>{{ item }}</li>{% endfor %}</ul>
+  {% if cluster_hosts %}
+  <p>One real, host-reported data point that is adjacent to this: the following hosts locally
+     report membership in a vCenter compute resource / cluster (this is not EVC or HA
+     configuration, just a cluster ID each host's own agent knows about):</p>
+  <ul>
+    {% for h in cluster_hosts %}
+    <li>{{ h.hostname }}: {{ h.cluster_id }}{% if h.cluster_in_alarm %} (local agent reports an alarm){% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <h3 id="recommendation">3.6 Recommendation</h3>
+  {% for g in recommendation_groups %}
+  <div class="finding">
+    <span class="badge {{ g.severity }}">{{ g.severity }}</span>
+    <h3>{{ g.title }}</h3>
+    <p><strong>Affected:</strong> {{ g.affected|join(", ") }}</p>
+    <p><strong>Action:</strong> {{ g.action }}</p>
+    {% if g.limitations %}<p class="muted"><strong>Limitations:</strong> {{ g.limitations }}</p>{% endif %}
+  </div>
+  {% else %}
+  <p>No findings were raised, so there are no recommendations to track.</p>
+  {% endfor %}
 </section>
 
 </main>

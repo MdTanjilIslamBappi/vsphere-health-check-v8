@@ -17,6 +17,8 @@ class ReportAuthorship:
     engineer_name: str | None = None
     author: str | None = None
     verifier: str | None = None
+    revision: str = "V01"
+    description: str = "Initial copy"
 
     @property
     def is_empty(self) -> bool:

@@ -48,6 +48,7 @@ COVERAGE_CATEGORIES = (
     "smart_data",
     "hardware_sensors",
     "log_signals",
+    "hardware_inventory",
 )
 
 
@@ -66,6 +67,13 @@ class HostInfo(BaseModel):
     log_events: list[str] = Field(default_factory=list)
     log_signal_counts: dict[str, int] = Field(default_factory=dict)
     log_data_available: bool = False
+    server_manufacturer: str | None = None
+    server_model: str | None = None
+    cpu_model: str | None = None
+    cpu_sockets: int | None = None
+    management_ip: str | None = None
+    cluster_id: str | None = None
+    cluster_in_alarm: bool | None = None
     parse_warnings: list[str] = Field(default_factory=list)
 
     def coverage(self) -> dict[str, bool]:
@@ -83,4 +91,5 @@ class HostInfo(BaseModel):
             "smart_data": any(d.smart_overall_health for d in self.storage_devices),
             "hardware_sensors": len(self.sensors) > 0,
             "log_signals": self.log_data_available,
+            "hardware_inventory": self.server_model is not None or self.cpu_model is not None,
         }

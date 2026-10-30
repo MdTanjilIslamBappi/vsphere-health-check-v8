@@ -156,6 +156,11 @@ vhealth inspect --input path\to\your-bundle.zip
 vhealth assess --input path\to\your-bundle.zip --output .\out
 ```
 
+If your bundle is a vCenter-style `.zip` containing several ESXi hosts
+(e.g. one export covering a whole cluster or site), this still produces
+**one** combined `report.html`/`report.docx` covering every host found
+inside it -- you do not need to run vhealth once per host.
+
 This writes, into the `out` folder:
 
 - `assessment.json` — the raw, versioned results (useful for automation
@@ -195,6 +200,10 @@ vhealth from a script and don't want it to ever stop and ask, add
 `--no-prompt` — any name you didn't pass as a flag is then just left off
 the report.
 
+The report's "Version History" table also shows a revision label and
+description, which you can set with `--revision` (default `V01`) and
+`--description` (default "Initial copy") — these are never prompted for.
+
 ## 8. Reading the report
 
 Open `report.html` (or `.docx`) and look for:
@@ -207,6 +216,13 @@ Open `report.html` (or `.docx`) and look for:
 - **Limitations**: some findings include a note about what the rule
   *can't* rule out (e.g. a count-based heuristic that doesn't know about
   scheduled maintenance). Read these before escalating a finding.
+- **"Not Assessed From This Bundle"** (section 3.5): a short list of
+  things vhealth genuinely cannot check from an ESXi host bundle alone —
+  EVC mode, vSphere HA/DRS configuration, vCenter-level alarms, and VM
+  resource utilization. These require a live vCenter connection or a
+  vCenter-side export, which vhealth never performs. This section is
+  listed explicitly rather than silently skipped, so you know to check
+  these another way if they matter for your review.
 
 A few VMware terms you may see in findings:
 

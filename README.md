@@ -88,19 +88,34 @@ for every available key and its default.
 
 `assess` and `report` both accept `--engineer`, `--author`, and
 `--verifier`, which appear on the cover page of the HTML and DOCX
-reports:
+reports, plus `--revision` (default `V01`) and `--description` (default
+"Initial copy") for the report's Version History table:
 
 ```bash
 vhealth assess --input support-bundle.zip --output ./out \
-  --engineer "Jane Doe" --author "Jane Doe" --verifier "John Smith"
+  --engineer "Jane Doe" --author "Jane Doe" --verifier "John Smith" \
+  --revision V02 --description "Re-verified after remediation"
 ```
 
-Leave any of them off and you'll be prompted for it interactively (press
-Enter to skip); pass `--no-prompt` to skip the prompts entirely and leave
-them unset, which also happens automatically in a non-interactive run
-(CI, a script). None of this is written into `assessment.json` -- a
+Leave `--engineer`/`--author`/`--verifier` off and you'll be prompted for
+each interactively (press Enter to skip); pass `--no-prompt` to skip the
+prompts entirely and leave them unset, which also happens automatically in
+a non-interactive run (CI, a script). `--revision`/`--description` are
+never prompted for. None of this is written into `assessment.json` -- a
 verifier can add their name on a later `vhealth report` re-render without
 re-running the assessment.
+
+### Report layout
+
+Every HTML/DOCX report has the same structure: a cover page, a Version
+History table, a table of contents, an Executive Summary, Scope of Health
+Check, and a System Status section with an aggregate hardware-status
+table, a VMware-components status table, an ESXi host inventory table
+(server model/CPU model/management IP), detailed findings, an explicit
+"Not Assessed From This Bundle" section (EVC mode, vSphere HA/DRS,
+vCenter alarms, VM-level state -- none of which an ESXi `vm-support`
+bundle contains), and grouped recommendations. See RULE_CATALOG.md and
+SUPPORTED_FORMATS.md for exactly what backs each section.
 
 ## How it works
 

@@ -22,7 +22,21 @@ EXIT_UNEXPECTED_ERROR = 3
 
 
 def _authorship_options(f):
-    """Shared --engineer/--author/--verifier/--no-prompt options for report-producing commands."""
+    """Shared report-metadata options for report-producing commands."""
+    f = click.option(
+        "--description",
+        "revision_description",
+        default="Initial copy",
+        show_default=True,
+        help="Description shown in the report's Version History table.",
+    )(f)
+    f = click.option(
+        "--revision",
+        "revision",
+        default="V01",
+        show_default=True,
+        help="Revision label shown in the report's Version History table.",
+    )(f)
     f = click.option(
         "--verifier",
         "verifier_name",
@@ -55,6 +69,8 @@ def _resolve_authorship(
     report_author: str | None,
     verifier_name: str | None,
     no_prompt: bool,
+    revision: str = "V01",
+    revision_description: str = "Initial copy",
 ) -> ReportAuthorship:
     """Fill in any of engineer/author/verifier not given on the command line.
 
@@ -64,7 +80,11 @@ def _resolve_authorship(
     """
     if no_prompt or not sys.stdin.isatty():
         return ReportAuthorship(
-            engineer_name=engineer_name, author=report_author, verifier=verifier_name
+            engineer_name=engineer_name,
+            author=report_author,
+            verifier=verifier_name,
+            revision=revision,
+            description=revision_description,
         )
 
     if engineer_name is None:
@@ -83,7 +103,11 @@ def _resolve_authorship(
         ).strip() or None
 
     return ReportAuthorship(
-        engineer_name=engineer_name, author=report_author, verifier=verifier_name
+        engineer_name=engineer_name,
+        author=report_author,
+        verifier=verifier_name,
+        revision=revision,
+        description=revision_description,
     )
 
 
@@ -173,9 +197,13 @@ def assess(
     report_author: str | None,
     verifier_name: str | None,
     no_prompt: bool,
+    revision: str,
+    revision_description: str,
 ) -> None:
     """Run ingestion, parsing, correlation and rules, then write reports."""
-    authorship = _resolve_authorship(engineer_name, report_author, verifier_name, no_prompt)
+    authorship = _resolve_authorship(
+        engineer_name, report_author, verifier_name, no_prompt, revision, revision_description
+    )
 
     try:
         config = load_config(config_path)
@@ -243,9 +271,13 @@ def report(
     report_author: str | None,
     verifier_name: str | None,
     no_prompt: bool,
+    revision: str,
+    revision_description: str,
 ) -> None:
     """Re-render reports from an existing assessment.json, without re-parsing the bundle."""
-    authorship = _resolve_authorship(engineer_name, report_author, verifier_name, no_prompt)
+    authorship = _resolve_authorship(
+        engineer_name, report_author, verifier_name, no_prompt, revision, revision_description
+    )
 
     try:
         assessment = Assessment.model_validate_json(assessment_path.read_text(encoding="utf-8"))

@@ -4,6 +4,13 @@ Every rule below is implemented in `src/vhealth/rules/`. This file is
 maintained by hand alongside the code; `CONTRIBUTING.md` requires any new
 rule to add a row here in the same change.
 
+Most rules are per-host: they inspect one `HostInfo` and run once per host
+in the assessment. A **fleet rule** (marked below) instead sees every host
+discovered in the bundle at once and runs once per assessment -- for
+checks that are only meaningful across hosts, such as whether they share a
+compatible CPU generation. A single-host bundle never triggers a fleet
+rule.
+
 | Rule ID | Title | Severity | Evidence required | Limitations |
 |---|---|---|---|---|
 | `storage.smart_health_not_ok` | Local disk reports non-OK SMART health | High | `storage_devices[].smart_overall_health` | Only disks whose driver exposes SMART to ESXi (typically local SAS/SATA/NVMe); SAN LUNs over FC/iSCSI are not covered. |
@@ -15,7 +22,8 @@ rule to add a row here in the same change.
 | `storage.path_dead_detected` | Dead storage path/device detected in vmkwarning log | High | `log_signal_counts.path_dead`, `log_events` | Same log-retention caveat as PDL. |
 | `storage.alua_path_connectivity` | Repeated ALUA path-connectivity errors detected | Medium | `log_signal_counts.alua_no_connection`, `log_events` | Only fires at 3+ occurrences to avoid flagging a single transient blip; the threshold is a heuristic, not a vendor-documented number. |
 | `storage.vob_problem_event` | VMkernel Observation (VOB) flagged a storage problem event | Medium | `log_signal_counts.vob_storage_problem`, `log_events` | vobd only logs events ESXi itself classified as `esx.problem.*`; it is not a complete list of storage issues. |
-| `coverage.limited_diagnostic_data` | Limited diagnostic data available in this support bundle | Low (Info if only 1-2 categories missing) | `coverage()` -- derived from `storage_adapters`/`storage_devices`/`smart_data`/`hardware_sensors`/`log_signals` presence | Reports what is missing, not why; cannot distinguish a reduced/incident-mode vm-support capture from hardware that genuinely has nothing to report (e.g. no local disks). |
+| `coverage.limited_diagnostic_data` | Limited diagnostic data available in this support bundle | Low (Info if only 1-2 categories missing) | `coverage()` -- derived from `storage_adapters`/`storage_devices`/`smart_data`/`hardware_sensors`/`log_signals`/`hardware_inventory` presence | Reports what is missing, not why; cannot distinguish a reduced/incident-mode vm-support capture from hardware that genuinely has nothing to report (e.g. no local disks). |
+| `fleet.cpu_model_mismatch` (**fleet rule**) | Multiple CPU models detected across assessed hosts | Medium | `cpu_model` (from `smbiosDump.txt`) on 2+ hosts in the assessment | Compares raw SMBIOS CPU model strings across hosts in this assessment only; has no visibility into actual vCenter cluster membership or EVC configuration, so it cannot tell you whether these hosts share a cluster or whether EVC already mitigates the mismatch. |
 
 ## Validation status
 
@@ -39,6 +47,13 @@ was also found and fixed: the `log_signals` coverage flag was computing
 "did a bad signal fire" instead of "was log data present to check",
 which would have wrongly marked every host with clean logs as having no
 log coverage at all -- see `CHANGELOG.md`.
+
+`fleet.cpu_model_mismatch` was validated against two real EAMSC2 hosts
+run together in one assessment (`eamsc2esxi03`/`eamsc2esxi04`): both
+report the identical CPU model from `smbiosDump.txt`, so the rule
+correctly did not fire. It has not yet been observed firing against a
+real mismatched-CPU fleet; the logic itself is covered by a synthetic
+unit test (two hosts with different `cpu_model` values).
 
 ## Adding a rule
 

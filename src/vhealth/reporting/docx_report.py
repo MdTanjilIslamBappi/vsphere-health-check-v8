@@ -5,14 +5,17 @@ from pathlib import Path
 from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
 
 from vhealth.config import AssessmentConfig
 from vhealth.models.assessment import Assessment
 from vhealth.models.findings import Severity
+from vhealth.reporting import summary
 from vhealth.reporting.authorship import ReportAuthorship
 
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 
 _SEVERITY_COLOR = {
     Severity.CRITICAL: RGBColor(0xB3, 0x00, 0x00),
@@ -22,6 +25,14 @@ _SEVERITY_COLOR = {
     Severity.INFO: RGBColor(0x6C, 0x75, 0x7D),
 }
 
+_STATUS_COLOR = {
+    "Healthy": RGBColor(0x1E, 0x7E, 0x34),
+    "Informational": RGBColor(0x5B, 0x8D, 0xEF),
+    "Advisory": RGBColor(0xC7, 0x7C, 0x00),
+    "Attention Needed": RGBColor(0xB3, 0x00, 0x00),
+    summary.NOT_ASSESSED: RGBColor(0x6C, 0x75, 0x7D),
+}
+
 
 def write_docx_report(
     assessment: Assessment,
@@ -29,33 +40,44 @@ def write_docx_report(
     output_path: Path,
     authorship: ReportAuthorship | None = None,
 ) -> None:
+    authorship = authorship or ReportAuthorship()
     doc = Document()
 
-    _add_title_page(doc, assessment, config, authorship or ReportAuthorship())
+    _add_title_page(doc, assessment, config, authorship)
+    doc.add_page_break()
+
+    _add_version_history(doc, assessment, authorship)
+    doc.add_page_break()
+
+    _add_table_of_contents(doc)
     doc.add_page_break()
 
     doc.add_heading("1. Executive Summary", level=1)
-    _add_executive_summary(doc, assessment)
+    doc.add_paragraph(summary.executive_summary_text(assessment))
+    _add_severity_counts(doc, assessment)
 
     doc.add_heading("2. Scope of Health Check", level=1)
     _add_scope(doc, assessment)
 
     doc.add_heading("3. System Status", level=1)
+
     doc.add_heading("3.1 Current Hardware Status", level=2)
-    _add_hardware_status(doc, assessment)
+    _add_hardware_status_table(doc, assessment)
 
     doc.add_heading("3.2 Current State Analysis of VMware Components", level=2)
-    _add_storage_components(doc, assessment)
+    _add_component_status_table(doc, assessment)
 
-    doc.add_heading("3.3 Current State Analysis of ESXi Hosts — Findings", level=2)
+    doc.add_heading("3.3 Current State Analysis of ESXi Hosts", level=2)
+    _add_host_inventory_table(doc, assessment)
+
+    doc.add_heading("3.4 Detailed Findings", level=2)
     _add_findings(doc, assessment)
 
-    doc.add_heading("3.4 Recommendation", level=2)
-    doc.add_paragraph(
-        "Review each finding above in severity order. Critical and high-severity findings "
-        "should be investigated before the next maintenance window; medium/low findings "
-        "should be tracked and re-checked on the next assessment run."
-    )
+    doc.add_heading("3.5 Not Assessed From This Bundle", level=2)
+    _add_not_assessed_section(doc, assessment)
+
+    doc.add_heading("3.6 Recommendation", level=2)
+    _add_recommendations(doc, assessment)
 
     doc.save(str(output_path))
 
@@ -100,7 +122,44 @@ def _add_title_page(
             cells[1].text = value
 
 
-def _add_executive_summary(doc: Document, assessment: Assessment) -> None:
+def _add_version_history(
+    doc: Document, assessment: Assessment, authorship: ReportAuthorship
+) -> None:
+    doc.add_heading("Version History", level=1)
+    table = doc.add_table(rows=1, cols=4)
+    table.style = "Light Grid Accent 1"
+    for i, label in enumerate(["Date", "Rev.", "Author", "Description"]):
+        table.rows[0].cells[i].text = label
+    row = table.add_row().cells
+    row[0].text = assessment.metadata.assessment_timestamp.split("T")[0]
+    row[1].text = authorship.revision
+    row[2].text = authorship.author or authorship.engineer_name or ""
+    row[3].text = authorship.description
+
+
+def _add_table_of_contents(doc: Document) -> None:
+    doc.add_heading("Contents", level=1)
+    paragraph = doc.add_paragraph()
+    run = paragraph.add_run()
+    fld_begin = OxmlElement("w:fldChar")
+    fld_begin.set(qn("w:fldCharType"), "begin")
+    instr = OxmlElement("w:instrText")
+    instr.set(qn("xml:space"), "preserve")
+    instr.text = 'TOC \\o "1-3" \\h \\z \\u'
+    fld_separate = OxmlElement("w:fldChar")
+    fld_separate.set(qn("w:fldCharType"), "separate")
+    fld_text = OxmlElement("w:t")
+    fld_text.text = "Right-click here and choose Update Field to populate the table of contents."
+    fld_end = OxmlElement("w:fldChar")
+    fld_end.set(qn("w:fldCharType"), "end")
+    run._r.append(fld_begin)
+    run._r.append(instr)
+    run._r.append(fld_separate)
+    run._r.append(fld_text)
+    run._r.append(fld_end)
+
+
+def _add_severity_counts(doc: Document, assessment: Assessment) -> None:
     counts: dict[Severity, int] = {}
     for finding in assessment.findings:
         counts[finding.severity] = counts.get(finding.severity, 0) + 1
@@ -113,11 +172,6 @@ def _add_executive_summary(doc: Document, assessment: Assessment) -> None:
     row = table.add_row().cells
     for i, sev in enumerate(Severity):
         row[i].text = str(counts.get(sev, 0))
-
-    doc.add_paragraph(
-        f"{len(assessment.hosts)} ESXi host(s) were assessed from this support bundle. "
-        f"{len(assessment.findings)} finding(s) were raised."
-    )
 
 
 def _add_scope(doc: Document, assessment: Assessment) -> None:
@@ -138,38 +192,72 @@ def _add_scope(doc: Document, assessment: Assessment) -> None:
         cells[0].text = label
         cells[1].text = value
 
+    doc.add_paragraph("Checked by this assessment:").runs[0].bold = True
+    for item in summary.SCOPE_CHECKED:
+        doc.add_paragraph(item, style="List Bullet")
 
-def _add_hardware_status(doc: Document, assessment: Assessment) -> None:
-    for host in assessment.hosts:
-        doc.add_heading(host.hostname, level=3)
-        table = doc.add_table(rows=0, cols=2)
-        table.style = "Light List Accent 1"
-        for label, value in [
-            ("ESXi version", host.esxi_version or "unknown"),
-            ("Build", host.esxi_build or "unknown"),
-            ("Captured on", host.captured_on or "unknown"),
-            ("Storage adapters", str(len(host.storage_adapters))),
-            ("Storage devices", str(len(host.storage_devices))),
-            ("Hardware sensors", str(len(host.sensors))),
-        ]:
-            cells = table.add_row().cells
-            cells[0].text = label
-            cells[1].text = value
+    doc.add_paragraph("Not checked by this assessment (see Section 3.5):").runs[0].bold = True
+    for item in summary.SCOPE_NOT_ASSESSED:
+        doc.add_paragraph(item, style="List Bullet")
+
+    if assessment.metadata.processing_warnings:
+        doc.add_paragraph(
+            f"Processing warnings ({len(assessment.metadata.processing_warnings)}):"
+        ).runs[0].italic = True
+        for w in assessment.metadata.processing_warnings:
+            doc.add_paragraph(f"{w.source}: {w.message}", style="List Bullet")
 
 
-def _add_storage_components(doc: Document, assessment: Assessment) -> None:
-    for host in assessment.hosts:
-        doc.add_heading(f"{host.hostname} — storage adapters", level=3)
-        table = doc.add_table(rows=1, cols=4)
-        table.style = "Light Grid Accent 1"
-        for i, label in enumerate(["HBA", "Driver", "Description", "Link state"]):
-            table.rows[0].cells[i].text = label
-        for adapter in host.storage_adapters:
-            cells = table.add_row().cells
-            cells[0].text = adapter.device
-            cells[1].text = adapter.driver or ""
-            cells[2].text = adapter.description or ""
-            cells[3].text = adapter.link_state or ""
+def _status_cell(cells, index: int, status: str) -> None:
+    cells[index].text = status
+    run = cells[index].paragraphs[0].runs[0]
+    run.bold = True
+    color = _STATUS_COLOR.get(status)
+    if color:
+        run.font.color.rgb = color
+
+
+def _add_hardware_status_table(doc: Document, assessment: Assessment) -> None:
+    table = doc.add_table(rows=1, cols=2)
+    table.style = "Light Grid Accent 1"
+    table.rows[0].cells[0].text = "Category"
+    table.rows[0].cells[1].text = "Status"
+    for row_data in summary.hardware_status_rows(assessment):
+        cells = table.add_row().cells
+        cells[0].text = row_data.label
+        _status_cell(cells, 1, row_data.status)
+    doc.add_paragraph(
+        "Derived from the storage, SMART, and IPMI sensor findings in this assessment. "
+        "\"Management Connection Status\" requires live vCenter/ESXi connectivity and is "
+        "not assessed from a static bundle."
+    )
+
+
+def _add_component_status_table(doc: Document, assessment: Assessment) -> None:
+    table = doc.add_table(rows=1, cols=3)
+    table.style = "Light Grid Accent 1"
+    for i, label in enumerate(["Component", "Status", "Remarks"]):
+        table.rows[0].cells[i].text = label
+    for row_data in summary.component_status_rows(assessment):
+        cells = table.add_row().cells
+        cells[0].text = row_data.component
+        _status_cell(cells, 1, row_data.status)
+        cells[2].text = row_data.remarks
+
+
+def _add_host_inventory_table(doc: Document, assessment: Assessment) -> None:
+    table = doc.add_table(rows=1, cols=5)
+    table.style = "Light Grid Accent 1"
+    headers = ["S.No", "Server Name", "Management IP", "Server Model", "CPU Model"]
+    for i, label in enumerate(headers):
+        table.rows[0].cells[i].text = label
+    for row_data in summary.host_inventory_rows(assessment):
+        cells = table.add_row().cells
+        cells[0].text = str(row_data.index)
+        cells[1].text = row_data.hostname
+        cells[2].text = row_data.management_ip
+        cells[3].text = row_data.server_model
+        cells[4].text = row_data.cpu_model
 
 
 def _add_findings(doc: Document, assessment: Assessment) -> None:
@@ -202,3 +290,52 @@ def _add_findings(doc: Document, assessment: Assessment) -> None:
             p.add_run(finding.limitations)
         for line in finding.evidence:
             doc.add_paragraph(line, style="Intense Quote")
+
+
+def _add_not_assessed_section(doc: Document, assessment: Assessment) -> None:
+    doc.add_paragraph(
+        "The items below require data this tool cannot get from an ESXi vm-support bundle "
+        "(EVC/cluster configuration, vCenter alarms, VM-level state) -- they need a live "
+        "vCenter connection or a vCenter-side export instead. They are listed here, rather "
+        "than omitted, so a reviewer can see exactly what still needs checking manually, or "
+        "strike any that don't apply."
+    )
+    for item in summary.SCOPE_NOT_ASSESSED:
+        doc.add_paragraph(item, style="List Bullet")
+
+    cluster_hosts = [h for h in assessment.hosts if h.cluster_id]
+    if cluster_hosts:
+        doc.add_paragraph(
+            "One real, host-reported data point that is adjacent to this: the following "
+            "hosts locally report membership in a vCenter compute resource / cluster "
+            "(this is not EVC or HA configuration, just a cluster ID each host's own agent "
+            "knows about):"
+        )
+        for host in cluster_hosts:
+            alarm = " (local agent reports an alarm)" if host.cluster_in_alarm else ""
+            doc.add_paragraph(f"{host.hostname}: {host.cluster_id}{alarm}", style="List Bullet")
+
+
+def _add_recommendations(doc: Document, assessment: Assessment) -> None:
+    groups = summary.recommendation_groups(assessment)
+    if not groups:
+        doc.add_paragraph("No findings were raised, so there are no recommendations to track.")
+        return
+    for group in groups:
+        heading = doc.add_paragraph()
+        run = heading.add_run(f"[{group.severity.upper()}] {group.title}")
+        run.bold = True
+        run.font.color.rgb = _SEVERITY_COLOR[Severity(group.severity)]
+
+        p = doc.add_paragraph()
+        p.add_run("Affected: ").bold = True
+        p.add_run(", ".join(group.affected))
+
+        p = doc.add_paragraph()
+        p.add_run("Action: ").bold = True
+        p.add_run(group.action)
+
+        if group.limitations:
+            p = doc.add_paragraph()
+            p.add_run("Limitations: ").bold = True
+            p.add_run(group.limitations)

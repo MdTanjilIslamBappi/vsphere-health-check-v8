@@ -13,6 +13,29 @@ and the "Known limitations" section of [README.md](README.md)).
 
 ### Added
 
+- New default HTML/DOCX report layout: cover page, a Version History table
+  (`--revision`/`--description` options, default `V01`/"Initial copy"), a
+  table of contents, an aggregate "Current Hardware Status" pass/fail
+  table, a "Current State Analysis of VMware Components" status table
+  (Component/Status/Remarks), and a "Current State Analysis of ESXi Hosts"
+  inventory table (Server Name/Management IP/Server Model/CPU Model). A
+  new "3.5 Not Assessed From This Bundle" section explicitly lists what
+  this tool cannot check from an ESXi `vm-support` bundle (EVC mode,
+  vSphere HA/DRS config, vCenter alarms, VM-level utilization) instead of
+  silently omitting it, and "3.6 Recommendation" groups findings by rule
+  with an Affected/Action layout. See RULE_CATALOG.md and
+  SUPPORTED_FORMATS.md.
+- `hardware_inventory.py` parser: server manufacturer/model and CPU model
+  (from `commands/smbiosDump.txt`), management IP (`vmk0` from
+  `commands/esxcfg-vmknic_-l.txt`), and host-reported cluster/compute-resource
+  membership (`commands/clusterAdmin_cluster-status.txt`, where present).
+  Validated against real EAMSC2 bundles: extracted server model, CPU
+  model, and management IP matched a prior hand-written customer report
+  for the same hosts exactly.
+- `fleet.cpu_model_mismatch` rule: a new "fleet rule" category that
+  compares data *across* every host in one assessment rather than one
+  host at a time, flagging mixed CPU models (a real vMotion/EVC
+  compatibility risk) across the hosts in a single run.
 - `--engineer`/`--author`/`--verifier` options on `assess` and `report`,
   shown on the cover page of both the HTML and DOCX reports. Any left
   unset are prompted for interactively (press Enter to skip); `--no-prompt`

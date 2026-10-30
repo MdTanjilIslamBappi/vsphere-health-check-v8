@@ -25,7 +25,7 @@ from vhealth.models.assessment import (
 )
 from vhealth.models.host import COVERAGE_CATEGORIES
 from vhealth.parsers import PARSER_VERSIONS
-from vhealth.rules import RULE_ENGINE_VERSION, evaluate_all
+from vhealth.rules import RULE_ENGINE_VERSION, evaluate_all, evaluate_all_fleet
 from vhealth.utils.hashing import sha256_file
 
 _EVIDENCE_RELATIVE_PATHS = [
@@ -36,6 +36,9 @@ _EVIDENCE_RELATIVE_PATHS = [
     "json/localcli_storage-core-device-list.json",
     "commands/smartinfo.txt",
     "commands/localcli_hardware-ipmi-sdr-list--p--i--n-all.txt",
+    "commands/smbiosDump.txt",
+    "commands/esxcfg-vmknic_-l.txt",
+    "commands/clusterAdmin_cluster-status.txt",
 ]
 
 
@@ -64,7 +67,9 @@ def run_assessment(input_path: Path, output_dir: Path, config: AssessmentConfig)
         for warning in host.parse_warnings:
             processing_warnings.append(ProcessingWarning(source=host.hostname, message=warning))
 
-    findings = evaluate_all(hosts, config.disabled_rules)
+    findings = evaluate_all(hosts, config.disabled_rules) + evaluate_all_fleet(
+        hosts, config.disabled_rules
+    )
 
     evidence_manifest = _build_evidence_manifest(bundle_refs)
     supported_format_coverage = _build_format_coverage(hosts)

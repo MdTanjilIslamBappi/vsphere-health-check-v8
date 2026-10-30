@@ -7,10 +7,11 @@ from jinja2 import Environment
 
 from vhealth.config import AssessmentConfig
 from vhealth.models.assessment import Assessment
+from vhealth.reporting import summary
 from vhealth.reporting.authorship import ReportAuthorship
-from vhealth.rules import ALL_RULES
+from vhealth.rules import ALL_FLEET_RULES, ALL_RULES
 
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 
 _TEMPLATE_PATH = "templates/report.html.j2"
 
@@ -38,6 +39,15 @@ def write_html_report(
         hosts=assessment.hosts,
         findings=sorted(assessment.findings, key=lambda f: -f.severity.rank),
         severity_counts=severity_counts,
-        rule_count=len(ALL_RULES),
+        rule_count=len(ALL_RULES) + len(ALL_FLEET_RULES),
+        executive_summary=summary.executive_summary_text(assessment),
+        scope_checked=summary.SCOPE_CHECKED,
+        scope_not_assessed=summary.SCOPE_NOT_ASSESSED,
+        hardware_status_rows=summary.hardware_status_rows(assessment),
+        component_status_rows=summary.component_status_rows(assessment),
+        host_inventory_rows=summary.host_inventory_rows(assessment),
+        recommendation_groups=summary.recommendation_groups(assessment),
+        not_assessed_status=summary.NOT_ASSESSED,
+        cluster_hosts=[h for h in assessment.hosts if h.cluster_id],
     )
     output_path.write_text(html, encoding="utf-8")

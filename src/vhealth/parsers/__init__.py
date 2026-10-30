@@ -7,8 +7,24 @@ malformed/missing input -- missing evidence is recorded as a warning so
 the rest of the assessment can proceed.
 """
 
-from vhealth.parsers import readme, sensors, smart, storage_core, system_version, vmk_log
+from vhealth.parsers import (
+    hardware_inventory,
+    readme,
+    sensors,
+    smart,
+    storage_core,
+    system_version,
+    vmk_log,
+)
 
-PARSER_MODULES = [readme, system_version, storage_core, smart, sensors, vmk_log]
+PARSER_MODULES = [
+    readme,
+    system_version,
+    storage_core,
+    smart,
+    sensors,
+    vmk_log,
+    hardware_inventory,
+]
 
 PARSER_VERSIONS = {m.__name__.rsplit(".", 1)[-1]: m.VERSION for m in PARSER_MODULES}
