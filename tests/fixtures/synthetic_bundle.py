@@ -100,6 +100,7 @@ def build_host_dir(
     ipmi_sel_message: str | None = None,
     ipmi_sel_when: str = "2026-01-15T10:05:00",
     nic_link_status: dict[str, bool] | None = None,
+    configstore_integrity_ok: bool | None = None,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -159,6 +160,11 @@ def build_host_dir(
     False}``), adds a ``nicinfo.sh`` dump with one row per named NIC and
     that Link Status (``Up``/``Down``); left as ``None``, no NIC link
     data is written at all.
+
+    ``configstore_integrity_ok``, if given (True or False), adds a
+    ``sqlite3 ... PRAGMA integrity_check`` dump reporting ``ok`` or a
+    synthetic corruption line; left as ``None``, no ConfigStore data is
+    written at all.
     """
     bundle_dir = root / f"esx-{hostname}-2026-01-15"
     (bundle_dir / "commands").mkdir(parents=True)
@@ -443,6 +449,14 @@ def build_host_dir(
         (bundle_dir / "commands" / "nicinfo.sh.txt").write_text(
             nicinfo_dump, encoding="utf-8"
         )
+
+    if configstore_integrity_ok is not None:
+        text = "ok\n" if configstore_integrity_ok else "*** in database main ***\nrow 1 missing from index\n"
+        (
+            bundle_dir
+            / "commands"
+            / "sqlite3_etcvmwareconfigstorecurrent-store-1-PRAGMAintegrity_check.txt"
+        ).write_text(text, encoding="utf-8")
 
     return bundle_dir
 

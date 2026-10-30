@@ -4,6 +4,7 @@ from synthetic_bundle import build_host_dir
 
 from vhealth.models.host import HostInfo
 from vhealth.parsers import (
+    configstore,
     coredump,
     datastore,
     hardware_inventory,
@@ -427,3 +428,26 @@ def test_nic_link_parser_reports_warning_when_file_missing(tmp_path):
     warnings = nic_link.parse(host_dir, host)
     assert warnings != []
     assert host.nic_data_available is False
+
+
+def test_configstore_parser_reports_ok(tmp_path):
+    host_dir, host = _build_host(tmp_path, configstore_integrity_ok=True)
+    warnings = configstore.parse(host_dir, host)
+    assert warnings == []
+    assert host.configstore_data_available is True
+    assert host.configstore_integrity_ok is True
+
+
+def test_configstore_parser_reports_failed_integrity_check(tmp_path):
+    host_dir, host = _build_host(tmp_path, configstore_integrity_ok=False)
+    warnings = configstore.parse(host_dir, host)
+    assert warnings == []
+    assert host.configstore_data_available is True
+    assert host.configstore_integrity_ok is False
+
+
+def test_configstore_parser_reports_warning_when_file_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = configstore.parse(host_dir, host)
+    assert warnings != []
+    assert host.configstore_data_available is False

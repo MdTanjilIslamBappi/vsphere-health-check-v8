@@ -45,6 +45,7 @@ see "Adding a rule" below.
 | `network.vswitch_all_uplinks_down` | Network | All of a network switch's uplinks have no physical link | Critical | `network_switches[].uplinks`, `nic_adapters[].link_up` (`esxcfg-vswitch -l` cross-referenced against `nicinfo.sh`) | Point-in-time snapshot at capture only. |
 | `fleet.datastore_usage_warning` (**fleet rule**) | Storage | Datastore is running low on free space | Medium | `datastores[].capacity_bytes`/`available_bytes` (from `vmkfstools -P -v 10`) on any host in the assessment | Point-in-time snapshot at capture only; deduplicated by UUID across hosts that share a datastore. Uses vCenter's own default "Datastore usage on disk" alarm's Warning threshold (75% used, Broadcom KB 450627) rather than an invented number. |
 | `fleet.datastore_usage_critical` (**fleet rule**) | Storage | Datastore is critically low on free space | High | `datastores[].capacity_bytes`/`available_bytes` (from `vmkfstools -P -v 10`) on any host in the assessment | Same as above, using vCenter's own default alarm's Critical/Alert threshold (85% used). |
+| `hardware.configstore_integrity_check_failed` | Other | ConfigStore database integrity check did not report 'ok' | Critical | `configstore_integrity_ok` (from `sqlite3 ... PRAGMA integrity_check` against `/etc/vmware/configstore`) | Point-in-time snapshot at capture only; implemented from SQLite's documented integrity_check behaviour, not yet observed firing against real-world data (see below). |
 
 ## Validation status
 
@@ -192,6 +193,16 @@ status and historical capacity trending remain genuinely vCenter-only.
 `fleet.datastore_usage_critical` has not yet been observed firing (no real
 datastore seen so far is above the 85%-used critical threshold) and is
 covered by a synthetic unit test only.
+
+`hardware.configstore_integrity_check_failed`'s non-firing path was
+confirmed against the real 10-host EAMSC2 bundle: every host's
+`sqlite3 ... PRAGMA integrity_check` output is exactly `ok`. The firing
+(corrupt-database) case has not yet been observed against real-world
+data and is covered by a synthetic unit test only, per the "Do not add
+a rule..." rule below -- it is included anyway because ConfigStore
+corruption is a documented real failure mode (Broadcom KB 312114, KB
+438104), not a hypothetical one, and the healthy case is already
+real-data-validated.
 
 ## Adding a rule
 

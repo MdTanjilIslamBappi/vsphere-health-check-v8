@@ -159,6 +159,18 @@ def test_run_assessment_flags_datastore_low_on_free_space(tmp_path):
     assert "fleet.datastore_usage_warning" in rule_ids
 
 
+def test_run_assessment_flags_configstore_integrity_check_failure(tmp_path):
+    bundle_path = build_tgz(tmp_path / "host.tgz", configstore_integrity_ok=False)
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    host = assessment.hosts[0]
+    assert host.configstore_data_available is True
+    assert host.configstore_integrity_ok is False
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "hardware.configstore_integrity_check_failed" in rule_ids
+
+
 def test_run_assessment_on_multi_host_vcenter_zip(tmp_path):
     bundle_path = build_vcenter_zip(
         tmp_path / "vc.zip", hostnames=["esxi-a.example.test", "esxi-b.example.test"]

@@ -258,6 +258,19 @@ and the "Known limitations" section of [README.md](README.md)).
   Archive Project` 77.3%, `PI_Network_Volume` 75.8%, `ADMS Project Data
   Store` 75.1%), each correctly deduplicated to one finding per
   datastore rather than one per each of the 10 hosts that mounts it.
+- `hardware.configstore_integrity_check_failed` rule and `configstore.py`
+  parser: reads each ESXi host's own ConfigStore (`/etc/vmware/configstore`,
+  the SQLite-backed database that replaced the old flat-file `esx.conf`
+  in ESXi 7.x/8.x) integrity check result (`sqlite3 ... PRAGMA
+  integrity_check`) and flags anything other than the healthy `ok`
+  result as Critical. ConfigStore corruption/exhaustion is a documented
+  real failure mode (Broadcom KB 312114, KB 438104), not a hypothetical
+  one. New "ConfigStore Integrity" component row, folded into the
+  existing "Other" category. Validated against the real 10-host EAMSC2
+  bundle: every host reports `ok`, so the healthy (non-firing) path is
+  real-data-confirmed; the firing (corrupt) path is covered by a
+  synthetic unit test only, same convention as `coredump_not_configured`
+  and `community_supported_vib_installed` before it.
 
 ### Fixed
 

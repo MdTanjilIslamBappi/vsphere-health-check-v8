@@ -45,6 +45,7 @@ _PROCESSOR_RULE_IDS = {"fleet.cpu_model_mismatch"}
 _NTP_RULE_IDS = {"hardware.ntp_not_synchronized"}
 _COREDUMP_RULE_IDS = {"hardware.coredump_not_configured"}
 _VIB_RULE_IDS = {"hardware.community_supported_vib_installed"}
+_CONFIGSTORE_RULE_IDS = {"hardware.configstore_integrity_check_failed"}
 _MULTIPATH_RULE_IDS = {
     "storage.multipath_all_paths_dead",
     "storage.multipath_reduced_redundancy",
@@ -180,6 +181,14 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         else "vSwitch/DVS uplink redundancy and MTU consistency -- not assessed; no "
         "esxcfg-vswitch -l data found in this bundle"
     )
+    has_configstore_data = any(h.configstore_data_available for h in assessment.hosts)
+    configstore_item = (
+        "ConfigStore (host-configuration database) integrity (sqlite3 PRAGMA "
+        "integrity_check)"
+        if has_configstore_data
+        else "ConfigStore database integrity -- not assessed; no sqlite3 "
+        "PRAGMA integrity_check data found in this bundle"
+    )
     if vcenter is None:
         return (
             "ESXi host status and diagnostic data availability",
@@ -192,6 +201,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
             ntp_item,
             coredump_item,
             vib_item,
+            configstore_item,
             network_item,
             evc_item,
             datastore_item,
@@ -211,6 +221,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         ntp_item,
         coredump_item,
         vib_item,
+        configstore_item,
         network_item,
         evc_item,
         datastore_item,
@@ -463,6 +474,33 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
             "software vib list) found in this bundle."
         )
     rows.append(ComponentStatus("VIB Acceptance Level", vib_status, vib_remark))
+
+    hosts_with_configstore_data = [h for h in hosts if h.configstore_data_available]
+    if hosts_with_configstore_data:
+        failed = [h for h in hosts_with_configstore_data if h.configstore_integrity_ok is False]
+        configstore_findings = _by_ids(findings, _CONFIGSTORE_RULE_IDS)
+        configstore_status = (
+            _status_label(_worst_severity(configstore_findings))
+            if configstore_findings
+            else "Healthy"
+        )
+        if failed:
+            configstore_remark = (
+                f"{len(failed)} of {len(hosts_with_configstore_data)} host(s) failed "
+                f"their ConfigStore integrity check: {', '.join(h.hostname for h in failed)}."
+            )
+        else:
+            configstore_remark = (
+                f"All {len(hosts_with_configstore_data)} of {total} host(s) with "
+                "ConfigStore data report 'ok' on their integrity check."
+            )
+    else:
+        configstore_status = NOT_ASSESSED
+        configstore_remark = (
+            "ConfigStore database integrity -- not assessed; no sqlite3 "
+            "PRAGMA integrity_check data found in this bundle."
+        )
+    rows.append(ComponentStatus("ConfigStore Integrity", configstore_status, configstore_remark))
 
     hosts_with_switch_data = [h for h in hosts if h.network_switch_data_available]
     if hosts_with_switch_data:
@@ -877,6 +915,7 @@ _CATEGORY_BY_RULE_ID = {
     "hardware.ntp_not_synchronized": "Other",
     "hardware.coredump_not_configured": "Other",
     "hardware.community_supported_vib_installed": "Other",
+    "hardware.configstore_integrity_check_failed": "Other",
     "storage.multipath_all_paths_dead": "Storage",
     "storage.multipath_reduced_redundancy": "Storage",
     "network.vswitch_single_uplink": "Network",

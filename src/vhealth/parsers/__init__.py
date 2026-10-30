@@ -8,6 +8,7 @@ the rest of the assessment can proceed.
 """
 
 from vhealth.parsers import (
+    configstore,
     coredump,
     datastore,
     hardware_inventory,
@@ -43,6 +44,7 @@ PARSER_MODULES = [
     vswitch,
     ipmi_sel,
     nic_link,
+    configstore,
 ]
 
 PARSER_VERSIONS = {m.__name__.rsplit(".", 1)[-1]: m.VERSION for m in PARSER_MODULES}

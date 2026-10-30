@@ -62,6 +62,7 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
 | `commands/localcli_hardware-ipmi-sel-list--p--i--n-all.txt` | `ipmi_sel.py` | IPMI System Event Log history: uncorrectable-ECC, drive predictive-failure, PSU-failure, and critical-temperature `Assert` signals |
 | `commands/nicinfo.sh.txt` | `nic_link.py` | Physical NIC link state (Up/Down), cross-referenced against vSwitch/DVS uplink lists |
 | `commands/vmkfstools_-P--v-10-vmfsvolumes*.txt` | `datastore.py` | VMFS datastore name/UUID, backing device IDs, and point-in-time capacity/free-space (deduplicated fleet-wide by `fleet.datastore_usage_warning`/`_critical` in `fleet_rules.py`) |
+| `commands/sqlite3_etcvmwareconfigstorecurrent-store-1-PRAGMAintegrity_check.txt` | `configstore.py` | ESXi's host-configuration database (ConfigStore) SQLite integrity check result (`ok` vs. a corruption description) |
 
 ## Known gaps (not yet implemented)
 

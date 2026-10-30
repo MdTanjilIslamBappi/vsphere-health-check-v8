@@ -28,6 +28,7 @@ def test_component_status_rows_marks_unassessed_vcenter_sections():
     assert rows["Kernel Coredump Configuration"].status == summary.NOT_ASSESSED
     assert rows["VIB Acceptance Level"].status == summary.NOT_ASSESSED
     assert rows["Network (vSwitch/DVS)"].status == summary.NOT_ASSESSED
+    assert rows["ConfigStore Integrity"].status == summary.NOT_ASSESSED
 
 
 def test_component_status_rows_reports_real_datastore_and_vm_data_when_present():
@@ -181,6 +182,43 @@ def test_component_status_rows_reports_vib_healthy_when_no_community_vibs():
     rows = {row.component: row for row in summary.component_status_rows(assessment)}
     vib_row = rows["VIB Acceptance Level"]
     assert vib_row.status == "Healthy"
+
+
+def test_component_status_rows_reports_configstore_integrity_failure():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        configstore_data_available=True,
+        configstore_integrity_ok=False,
+    )
+    finding = Finding(
+        rule_id="hardware.configstore_integrity_check_failed",
+        title="ConfigStore database integrity check did not report 'ok'",
+        severity=Severity.CRITICAL,
+        summary="...",
+        affected_host="h1",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    configstore_row = rows["ConfigStore Integrity"]
+    assert configstore_row.status == "Attention Needed"
+    assert "h1" in configstore_row.remarks
+    assert (
+        summary.category_for_rule_id("hardware.configstore_integrity_check_failed")
+        == "Other"
+    )
+
+
+def test_component_status_rows_reports_configstore_healthy_when_ok():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        configstore_data_available=True,
+        configstore_integrity_ok=True,
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["ConfigStore Integrity"].status == "Healthy"
 
 
 def test_component_status_rows_reports_vswitch_single_uplink():

@@ -363,6 +363,20 @@ def test_datastore_usage_dedups_shared_datastore_across_hosts(tmp_path):
     assert len(usage_findings) == 1
 
 
+def test_configstore_integrity_check_failed_raises_critical_finding(tmp_path):
+    host = _assessed_host(tmp_path, configstore_integrity_ok=False)
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "hardware.configstore_integrity_check_failed" in rule_ids
+
+
+def test_configstore_integrity_check_ok_raises_no_finding(tmp_path):
+    host = _assessed_host(tmp_path, configstore_integrity_ok=True)
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "hardware.configstore_integrity_check_failed" not in rule_ids
+
+
 def test_fleet_disabled_rules_are_excluded():
     host_a = HostInfo(hostname="host-a", bundle_source="a", cpu_model="Intel Xeon Gold 6258R")
     host_b = HostInfo(hostname="host-b", bundle_source="b", cpu_model="Intel Xeon Gold 6430")

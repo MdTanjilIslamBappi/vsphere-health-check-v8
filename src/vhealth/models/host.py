@@ -167,6 +167,11 @@ class HostInfo(BaseModel):
     # issues on, so it is tracked by name rather than just a boolean.
     vib_data_available: bool = False
     community_supported_vibs: list[str] = Field(default_factory=list)
+    # ESXi's host-configuration database integrity (sqlite3 PRAGMA
+    # integrity_check on /etc/vmware/configstore). "ok" means healthy;
+    # anything else is one or more corruption-description lines.
+    configstore_data_available: bool = False
+    configstore_integrity_ok: bool | None = None
     # Storage multipath state (esxcli storage nmp path list), aggregated
     # per device from every path block that names it.
     multipath_data_available: bool = False
