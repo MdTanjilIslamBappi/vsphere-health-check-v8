@@ -35,6 +35,18 @@ def test_run_assessment_reports_running_vms_without_any_vcenter_bundle(tmp_path)
     assert host.datastore_name_for_uuid(host.virtual_machines[0].datastore_uuid) == "Prod-DS01"
 
 
+def test_run_assessment_observes_no_evc_masks_from_vm_power_on_logs(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz", vm_names=["vm-evc-check"], vm_no_evc_masks=True
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    host = assessment.hosts[0]
+    vm = next(v for v in host.virtual_machines if v.name == "vm-evc-check")
+    assert vm.no_evc_masks_observed is True
+
+
 def test_run_assessment_on_multi_host_vcenter_zip(tmp_path):
     bundle_path = build_vcenter_zip(
         tmp_path / "vc.zip", hostnames=["esxi-a.example.test", "esxi-b.example.test"]

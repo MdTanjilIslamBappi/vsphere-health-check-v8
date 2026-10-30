@@ -87,6 +87,7 @@ def build_host_dir(
     cluster_in_alarm: bool = False,
     datastore_name: str | None = None,
     vm_names: list[str] | None = None,
+    vm_no_evc_masks: bool = False,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -97,7 +98,9 @@ def build_host_dir(
     ``vm_names``, if given, adds a ``localcli vm process list`` dump
     reporting each name as a running VM, with its Config File path on
     the ``datastore_name`` volume (if also given) so datastore resolution
-    can be exercised end to end.
+    can be exercised end to end. ``vm_no_evc_masks=True`` additionally
+    writes each VM's own ``vmware.log`` with the real, documented
+    ``FeatureCompat: No EVC masks.`` power-on line.
 
     ``datastore_name``, if given, adds a ``vmkfstools -P -v 10`` dump for a
     VMFS datastore backed by the synthetic SAN disk
@@ -252,6 +255,13 @@ def build_host_dir(
                 f"   Display Name: {vm_name}\n"
                 f"   Config File: /vmfs/volumes/{datastore_uuid}/{vm_name}/{vm_name}.vmx\n"
             )
+            if vm_no_evc_masks:
+                vm_dir = bundle_dir / "vmfs" / "volumes" / datastore_uuid / vm_name
+                vm_dir.mkdir(parents=True, exist_ok=True)
+                (vm_dir / "vmware.log").write_text(
+                    "2026-01-15T10:00:00.000Z| vmx| I005: FeatureCompat: No EVC masks.\n",
+                    encoding="utf-8",
+                )
         (bundle_dir / "commands" / "localcli_vm-process-list.txt").write_text(
             "\n".join(blocks), encoding="utf-8"
         )

@@ -45,8 +45,26 @@ def test_component_status_rows_reports_real_datastore_and_vm_data_when_present()
     assert "DS01" in rows["Datastores"].remarks or "1 distinct" in rows["Datastores"].remarks
     assert rows["Virtual Machines"].status != summary.NOT_ASSESSED
     assert "1 running VM" in rows["Virtual Machines"].remarks
-    # EVC genuinely has no host-side source and must remain not assessed.
+    # No VM reported EVC-mask evidence here, so EVC must stay not assessed --
+    # it has no host-side source on its own.
     assert rows["EVC Mode"].status == summary.NOT_ASSESSED
+
+
+def test_component_status_rows_reports_evc_mask_evidence_from_vm_logs():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        virtual_machines=[
+            VirtualMachine(name="vm-a", uuid="u1", no_evc_masks_observed=True),
+            VirtualMachine(name="vm-b", uuid="u2", no_evc_masks_observed=False),
+        ],
+        vm_inventory_available=True,
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["EVC Mode"].status != summary.NOT_ASSESSED
+    assert "1 of 2" in rows["EVC Mode"].remarks
+    assert "No EVC CPU-feature masking" in rows["EVC Mode"].remarks
 
 
 def test_virtual_machine_inventory_rows_resolve_datastore_name():

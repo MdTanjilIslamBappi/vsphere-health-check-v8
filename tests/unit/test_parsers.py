@@ -94,6 +94,22 @@ def test_vm_inventory_parser_reports_warning_when_file_missing(tmp_path):
     assert host.virtual_machines == []
 
 
+def test_vm_inventory_parser_observes_no_evc_masks_from_vm_power_on_log(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path, vm_names=["vm-gamma"], vm_no_evc_masks=True
+    )
+    vm_inventory.parse(host_dir, host)
+    vm = host.virtual_machines[0]
+    assert vm.no_evc_masks_observed is True
+
+
+def test_vm_inventory_parser_leaves_evc_unobserved_without_vm_log(tmp_path):
+    host_dir, host = _build_host(tmp_path, vm_names=["vm-delta"])
+    vm_inventory.parse(host_dir, host)
+    vm = host.virtual_machines[0]
+    assert vm.no_evc_masks_observed is False
+
+
 def test_vmk_log_evidence_is_annotated_with_datastore_name(tmp_path):
     from vhealth.rules.log_rules import RULES
 

@@ -92,6 +92,20 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
     vcenter = assessment.vcenter
     has_datastore_names = any(h.datastores for h in assessment.hosts)
     has_vm_inventory = any(h.vm_inventory_available for h in assessment.hosts)
+    has_no_evc_mask_evidence = any(
+        vm.no_evc_masks_observed for h in assessment.hosts for vm in h.virtual_machines
+    )
+    if has_no_evc_mask_evidence:
+        evc_item = (
+            "EVC CPU-feature masking status, observed from running VMs' own power-on "
+            f"logs (not a read of the cluster's configured baseline, which "
+            f"{_VCENTER_DB_FIELDS_UNAVAILABLE})"
+        )
+    else:
+        evc_item = (
+            "Cluster EVC mode configuration -- "
+            f"{_VCENTER_BUNDLE_REQUIRED if vcenter is None else _VCENTER_DB_NOT_PARSED}"
+        )
     if has_datastore_names:
         datastore_item = (
             "Datastore names, identified from per-host VMFS volume dumps. Capacity and "
@@ -119,7 +133,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
             "Server and CPU hardware inventory, including processor compatibility "
             "across hosts",
             "Cluster/compute-resource membership, where host-reported in the bundle",
-            f"Cluster EVC mode configuration -- not assessed; {_VCENTER_BUNDLE_REQUIRED}",
+            evc_item,
             datastore_item,
             vm_item,
             f"vCenter-level active alarms -- not assessed; {_VCENTER_BUNDLE_REQUIRED}",
@@ -134,7 +148,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         f"appliance filesystem usage (vCenter bundle for {vcenter.hostname})",
         "Cluster inventory: cluster names and member hosts, as recovered from the "
         "vCenter operational logs in the capture",
-        f"Cluster EVC mode configuration -- {_VCENTER_DB_NOT_PARSED}",
+        evc_item,
         datastore_item,
         vm_item,
         f"vCenter-level active alarms -- {_VCENTER_DB_NOT_PARSED}",
@@ -226,14 +240,28 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
 
     rows.append(_cluster_status_row(assessment))
 
-    if assessment.vcenter is None:
-        evc_remark = f"Cluster EVC baseline {_VCENTER_BUNDLE_REQUIRED}"
+    all_vms = [vm for h in hosts for vm in h.virtual_machines]
+    no_mask_vms = [vm for vm in all_vms if vm.no_evc_masks_observed]
+    if no_mask_vms:
+        evc_status = "Informational"
+        evc_remark = (
+            f"No EVC CPU-feature masking observed in {len(no_mask_vms)} of "
+            f"{len(all_vms)} running VM(s)' own power-on log (vmware.log); this suggests "
+            "EVC is not actively constraining CPU features right now. This is evidence "
+            "from VM-level logs, not a read of the cluster's configured EVC baseline, "
+            f"which {_VCENTER_DB_FIELDS_UNAVAILABLE}."
+        )
     else:
-        evc_remark = f"Cluster EVC baseline -- {_VCENTER_DB_NOT_PARSED}"
+        evc_status = NOT_ASSESSED
+        evc_remark = (
+            f"Cluster EVC baseline {_VCENTER_BUNDLE_REQUIRED}"
+            if assessment.vcenter is None
+            else f"Cluster EVC baseline -- {_VCENTER_DB_NOT_PARSED}"
+        )
     rows.append(
         ComponentStatus(
             "EVC Mode",
-            NOT_ASSESSED,
+            evc_status,
             evc_remark,
         )
     )
@@ -417,7 +445,10 @@ def key_findings_at_a_glance(assessment: Assessment) -> list[str]:
             "Datastore and virtual machine data were not assessed from this bundle "
             "(see Scope of Health Check)."
         )
-    if assessment.vcenter is None:
+    evc_row = next(r for r in rows if r.component == "EVC Mode")
+    if evc_row.status != NOT_ASSESSED:
+        items.append(evc_row.remarks)
+    elif assessment.vcenter is None:
         items.append(
             "EVC mode and vCenter-level alarm data were not assessed from this bundle type "
             "(see Scope of Health Check)."

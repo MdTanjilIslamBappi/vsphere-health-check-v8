@@ -79,8 +79,8 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
   name/moref and vCLS-membership data recovered from `vpxd`'s current
   operational log. What is *not*, and cannot be, parsed from any support
   bundle (host or vCenter) is anything that lives only in vCenter's own
-  inventory database: EVC baseline, datastore capacity/free-space and
-  vCenter-side compliance status, full VM inventory (including
+  inventory database: the EVC baseline *name*, datastore capacity/free-space
+  and vCenter-side compliance status, full VM inventory (including
   powered-off VMs) and resource-utilization history, and vCenter-level
   active alarms. vCenter's `vc-support.sh` does not export that database
   -- confirmed by inspecting a real bundle's `storage/db/vpostgres/`
@@ -99,7 +99,21 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
   `clusterAdmin_cluster-status.txt` cluster ID parsed by
   `hardware_inventory.py` is likewise a host-reported fact (which compute
   resource this host currently thinks it belongs to), not a read of
-  vCenter's actual cluster/EVC/HA configuration.
+  vCenter's actual cluster/HA configuration.
+- **EVC masking evidence comes from each running VM's own power-on log,
+  not from vCenter.** `vm_inventory.py` also checks each discovered VM's
+  `vmware.log`/rotation files (found alongside its `.vmx`, under
+  `vmfs/volumes/<datastore>/<vm-name>/`) for the real, documented vmx
+  log line `FeatureCompat: No EVC masks.`, written at every power-on.
+  Finding it is genuine evidence that no EVC CPU-feature mask is applied
+  to that VM right now -- but it is *not* a read of the cluster's
+  configured EVC baseline name, and its absence is never treated as
+  evidence that a mask *is* applied (the line could simply be outside
+  the portion of the log read, or the retained rotation could predate
+  the current boot). This tool has found no documented or observed log
+  line for the "mask applied" case to parse with any confidence, so it
+  only ever reports the negative (no masking observed), never a
+  baseline name.
 - **Management IP selection** in `hardware_inventory.py` assumes `vmk0` is
   the management VMkernel NIC, which is the common ESXi convention but not
   a guarantee -- a host reconfigured to manage over a different vmknic

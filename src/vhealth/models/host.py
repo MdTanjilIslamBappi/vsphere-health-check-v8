@@ -58,6 +58,13 @@ class VirtualMachine(BaseModel):
     world_id: str | None = None
     config_path: str | None = None
     datastore_uuid: str | None = None
+    # True only when this VM's own vmware.log power-on record contains the
+    # documented "FeatureCompat: No EVC masks." line -- real, host-independent
+    # evidence that no EVC CPU-feature mask is being applied to it right now.
+    # This is NOT a read of the cluster's configured EVC baseline (no bundle
+    # contains that); it says nothing when False/absent, since that could
+    # mean masks *are* applied, or simply that no matching log line was found.
+    no_evc_masks_observed: bool = False
 
 
 class HardwareSensor(BaseModel):
