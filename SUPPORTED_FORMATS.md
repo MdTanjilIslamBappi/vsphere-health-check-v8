@@ -6,15 +6,20 @@
 |---|---|---|
 | Windows 11 Pro (build 26300) | 3.12.10 | Tested (this repository's development environment) |
 | Windows 10 | 3.11+ | Not yet tested |
-| Ubuntu LTS | 3.11+ | Not yet tested |
-| Debian | 3.11+ | Not yet tested |
+| Kali Linux (Debian-based), via WSL2 | 3.14.9 | Tested: install.sh, the full pytest suite, a real `assess` run against a synthetic bundle via the installed CLI binary, and uninstall.sh (including idempotent re-run and a reinstall afterward) all passed. **Not** bare-metal, **not** a container, **not** Ubuntu specifically. |
+| Ubuntu LTS (bare-metal or VM) | 3.11+ | Not yet tested |
+| Debian (bare-metal or VM) | 3.11+ | Not yet tested |
 
-Only the row marked "Tested" has actually been run. Do not read the other
+Only rows marked "Tested" have actually been run. Do not read the other
 rows as a compatibility claim -- the code avoids known Windows/Linux
 divergences (see below) and is expected to work, but "expected to work"
 and "tested" are tracked separately in this table on purpose, per this
 project's own rule against claiming compatibility that hasn't been
-verified.
+verified. WSL2 shares the real Linux kernel and userland, so this is a
+genuine Linux test of the CLI/install/uninstall path -- but it is not the
+same as bare-metal Ubuntu, and the PyInstaller build in
+`scripts/build_release.py` has still only been built and smoke-tested on
+Windows (see CHANGELOG.md).
 
 ## Input bundle formats
 

@@ -5,7 +5,10 @@ All notable changes to this project are documented in this file.
 ## [0.1.0] - Unreleased
 
 Initial implementation. Built and tested on Windows 11 with Python 3.12 and
-`uv` 0.13; **not yet tested on Linux** (see [SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md)
+`uv` 0.13. Also tested on Linux via WSL2 (Kali Linux, Debian-based) --
+install, the full test suite, a real `assess` run, and uninstall all pass
+there too -- but this is not a bare-metal/Ubuntu test, and the PyInstaller
+build is still Windows-only (see [SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md)
 and the "Known limitations" section of [README.md](README.md)).
 
 ### Added
@@ -44,8 +47,12 @@ and the "Known limitations" section of [README.md](README.md)).
 
 ### Known limitations
 
-- Linux has not been run or tested yet; only Windows 11 + Python 3.12 has
-  been validated end-to-end.
+- Linux validation so far is limited to WSL2 (Kali Linux, Debian-based):
+  install.sh/uninstall.sh, the full test suite, and a real `assess` run
+  via the installed CLI binary all pass there. Bare-metal Ubuntu/Debian
+  has not been tried, and the PyInstaller portable binary has still only
+  been built and tested on Windows 11 + Python 3.12 (see
+  [SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md) for the exact matrix).
 - Only a `vmkwarning`-derived subset of vmkernel events is scanned; this
   tool does not decode the binary VLF log format some ESXi 8.x releases
   use for the full `vmkernel.log` (see SUPPORTED_FORMATS.md).
