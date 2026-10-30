@@ -5,7 +5,7 @@
 ```bash
 git clone <repo-url>
 cd vmware-health-assessment
-./scripts/install.sh        # or scripts\install.ps1 on Windows
+./scripts/linux/install.sh        # or scripts\windows\install.ps1 on Windows
 uv sync --group dev          # adds pytest, ruff on top of the runtime deps
 ```
 

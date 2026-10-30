@@ -22,7 +22,7 @@ function Write-Step($message) {
     Write-Host "==> $message" -ForegroundColor Cyan
 }
 
-$RepoRoot = Split-Path -Parent $PSScriptRoot
+$RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $RepoRoot
 
 $removedSomething = $false

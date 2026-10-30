@@ -82,19 +82,21 @@ Close and reopen your terminal after this step, so it picks up the new
 
 ## 5. Run the install script
 
-From inside the repo folder:
+The repo keeps a separate folder per operating system — `scripts/windows/`
+and `scripts/linux/` — so you only ever need to look at the one for your
+own OS. From inside the repo folder:
 
 **Windows (PowerShell):**
 
 ```bash
-.\scripts\install.ps1
+.\scripts\windows\install.ps1
 ```
 
 **Linux:**
 
 ```bash
-chmod +x scripts/install.sh   # only needed the first time
-./scripts/install.sh
+chmod +x scripts/linux/install.sh   # only needed the first time
+./scripts/linux/install.sh
 ```
 
 This creates a `.venv` folder inside the repo, installs everything
@@ -202,8 +204,8 @@ A few VMware terms you may see in findings:
 | Symptom | Likely fix |
 |---|---|
 | `uv: command not found` / `'uv' is not recognized` | Close and reopen your terminal after installing uv (step 4), or re-run the install command from step 4. |
-| PowerShell says running scripts is disabled | Run PowerShell as yourself (not admin) and try `powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1` instead of double-clicking the script. |
-| `Permission denied` running `./scripts/install.sh` | Run `chmod +x scripts/install.sh` first. |
+| PowerShell says running scripts is disabled | Run PowerShell as yourself (not admin) and try `powershell -ExecutionPolicy Bypass -File .\scripts\windows\install.ps1` instead of double-clicking the script. |
+| `Permission denied` running `./scripts/linux/install.sh` | Run `chmod +x scripts/linux/install.sh` first. |
 | `vhealth.exe` won't launch / silently does nothing on a corporate Windows machine | Some corporate "Application Control" policies block unsigned `.exe` shims. Use `.\.venv\Scripts\python.exe -m vhealth.cli` instead — same tool, same result, just invoked through Python directly. |
 | `uv sync --locked` fails | The repo's lock file and dependency list disagree — this would indicate a packaging bug; please open an issue. |
 
@@ -215,13 +217,13 @@ the repo — it never touched anything system-wide. To remove it:
 **Windows (PowerShell):**
 
 ```bash
-.\scripts\uninstall.ps1
+.\scripts\windows\uninstall.ps1
 ```
 
 **Linux:**
 
 ```bash
-./scripts/uninstall.sh
+./scripts/linux/uninstall.sh
 ```
 
 This deletes `.venv` and any local test/build leftovers. It's safe to

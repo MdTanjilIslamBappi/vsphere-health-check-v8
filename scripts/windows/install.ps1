@@ -20,7 +20,7 @@ function Fail($message) {
     exit 1
 }
 
-$RepoRoot = Split-Path -Parent $PSScriptRoot
+$RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $RepoRoot
 
 Write-Step "Checking for uv"

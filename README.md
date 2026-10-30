@@ -30,21 +30,28 @@ every step in plain English.
 ```bash
 git clone https://github.com/MdTanjilIslamBappi/vsphere-health-check-v8.git
 cd vsphere-health-check-v8
-./scripts/install.sh        # Linux/macOS
-# or
-.\scripts\install.ps1       # Windows PowerShell
+
+# Linux/macOS
+./scripts/linux/install.sh
+
+# Windows PowerShell
+.\scripts\windows\install.ps1
 ```
 
 Both scripts create a project-local virtual environment (`.venv`), install
 pinned dependencies from `uv.lock`, install `vhealth` into it, and print
-the exact command to run it.
+the exact command to run it. `scripts/windows/` and `scripts/linux/` each
+hold a matching install/uninstall pair, so you only need to look at the
+folder for your own OS.
 
 ## Uninstall
 
 ```bash
-./scripts/uninstall.sh      # Linux/macOS
-# or
-.\scripts\uninstall.ps1     # Windows PowerShell
+# Linux/macOS
+./scripts/linux/uninstall.sh
+
+# Windows PowerShell
+.\scripts\windows\uninstall.ps1
 ```
 
 This removes the `.venv` virtual environment and any local build/test
