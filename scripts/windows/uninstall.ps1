@@ -3,9 +3,10 @@
 .SYNOPSIS
     Removes what install.ps1 created, on Windows.
 .DESCRIPTION
-    Deletes the project-local virtual environment (.venv) and any local
-    build/test caches. Safe to run repeatedly, including when nothing was
-    ever installed. Requires no administrator privileges.
+    Deletes the project-local virtual environment (.venv, or -VenvDir --
+    pass the same name you gave install.ps1) and any local build/test
+    caches. Safe to run repeatedly, including when nothing was ever
+    installed. Requires no administrator privileges.
 
     Does NOT touch:
       - uv or Python themselves (installed outside this repo, and likely
@@ -13,8 +14,16 @@
       - anything you passed to 'vhealth assess --output <dir>' (your own
         generated reports)
       - the cloned repo folder itself
+      - a venv under a different name than the one passed in (e.g. if you
+        installed to .venv-windows, plain '.\uninstall.ps1' will not touch it)
     See the "Uninstall" section in README.md if you want those gone too.
+.PARAMETER VenvDir
+    Directory the virtual environment was created in. Defaults to .venv.
 #>
+
+param(
+    [string]$VenvDir = ".venv"
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -27,12 +36,12 @@ Set-Location $RepoRoot
 
 $removedSomething = $false
 
-if (Test-Path ".venv") {
-    Write-Step "Removing virtual environment (.venv)"
-    Remove-Item -Recurse -Force ".venv"
+if (Test-Path $VenvDir) {
+    Write-Step "Removing virtual environment ($VenvDir)"
+    Remove-Item -Recurse -Force $VenvDir
     $removedSomething = $true
 } else {
-    Write-Host "    .venv not found (already removed, or vhealth was never installed here)."
+    Write-Host "    $VenvDir not found (already removed, or vhealth was never installed here)."
 }
 
 $cacheDirs = @(".pytest_cache", ".ruff_cache", ".mypy_cache", "htmlcov", "dist", "build")

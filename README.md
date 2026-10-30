@@ -44,6 +44,23 @@ the exact command to run it. `scripts/windows/` and `scripts/linux/` each
 hold a matching install/uninstall pair, so you only need to look at the
 folder for your own OS.
 
+**Using the same checkout from both Windows and WSL/Linux** (e.g. the
+repo lives at `C:\path\to\repo`, which is the same folder as
+`/mnt/c/path/to/repo` in WSL)? A Windows venv and a Linux venv can't be
+the same directory, so give each OS its own venv name:
+
+```bash
+# Windows PowerShell
+.\scripts\windows\install.ps1
+
+# WSL/Linux, same checkout
+./scripts/linux/install.sh .venv-linux
+```
+
+Both scripts take an optional venv directory name as their first
+argument (default `.venv`), and the matching uninstall script takes the
+same argument.
+
 ## Uninstall
 
 ```bash
@@ -56,10 +73,12 @@ folder for your own OS.
 
 This removes the `.venv` virtual environment and any local build/test
 caches (`dist/`, `build/`, `.pytest_cache/`, etc.) — i.e. everything
-`install.sh`/`install.ps1` created. It does **not** remove `uv` or Python
-themselves (they're outside this repo and likely used by other projects),
-and it does **not** touch any report folders you passed to `vhealth
-assess --output ...` — those are your own generated output.
+`install.sh`/`install.ps1` created. If you installed to a custom
+directory (see above), pass that same name, e.g.
+`./scripts/linux/uninstall.sh .venv-linux`. It does **not** remove `uv`
+or Python themselves (they're outside this repo and likely used by other
+projects), and it does **not** touch any report folders you passed to
+`vhealth assess --output ...` — those are your own generated output.
 
 To remove vhealth completely, also delete the folder you cloned the repo
 into, and uninstall `uv` itself if you don't need it elsewhere (see

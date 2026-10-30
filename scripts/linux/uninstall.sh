@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Removes what install.sh created, on Linux/macOS.
 #
-# Deletes the project-local virtual environment (.venv) and any local
+# Deletes the project-local virtual environment (.venv, or the directory
+# named by $1 -- pass the same name you gave install.sh) and any local
 # build/test caches. Safe to run repeatedly, including when nothing was
 # ever installed. Requires no root.
 #
@@ -11,6 +12,8 @@
 #   - anything you passed to 'vhealth assess --output <dir>' (your own
 #     generated reports)
 #   - the cloned repo folder itself
+#   - a venv under a different name than the one passed in (e.g. if you
+#     installed to .venv-linux, plain './uninstall.sh' will not touch it)
 # See the "Uninstall" section in README.md if you want those gone too.
 
 set -euo pipefail
@@ -21,14 +24,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 REPO_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 cd "$REPO_ROOT"
 
+VENV_DIR="${1:-.venv}"
+
 removed_something=0
 
-if [ -d ".venv" ]; then
-    step "Removing virtual environment (.venv)"
-    rm -rf ".venv"
+if [ -d "$VENV_DIR" ]; then
+    step "Removing virtual environment ($VENV_DIR)"
+    rm -rf "$VENV_DIR"
     removed_something=1
 else
-    echo "    .venv not found (already removed, or vhealth was never installed here)."
+    echo "    $VENV_DIR not found (already removed, or vhealth was never installed here)."
 fi
 
 for dir in .pytest_cache .ruff_cache .mypy_cache htmlcov dist build; do
