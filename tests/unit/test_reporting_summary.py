@@ -1,6 +1,6 @@
 from vhealth.models.assessment import Assessment, AssessmentMetadata
 from vhealth.models.findings import Finding, Severity
-from vhealth.models.host import HostInfo
+from vhealth.models.host import Datastore, HostInfo, VirtualMachine
 from vhealth.reporting import summary
 
 
@@ -24,6 +24,47 @@ def test_component_status_rows_marks_unassessed_vcenter_sections():
     assert rows["EVC Mode"].status == summary.NOT_ASSESSED
     assert rows["Datastores"].status == summary.NOT_ASSESSED
     assert rows["Virtual Machines"].status == summary.NOT_ASSESSED
+
+
+def test_component_status_rows_reports_real_datastore_and_vm_data_when_present():
+    """Datastore names and running-VM identity come from the ESXi hosts
+
+    themselves, not vCenter, so a bundle with no vCenter member at all
+    must still show them as assessed rather than a blanket "Not assessed".
+    """
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        datastores=[Datastore(name="DS01", uuid="uuid-1", naa_ids=["naa.1"])],
+        virtual_machines=[VirtualMachine(name="vm-a", uuid="vm-uuid-1")],
+        vm_inventory_available=True,
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["Datastores"].status != summary.NOT_ASSESSED
+    assert "DS01" in rows["Datastores"].remarks or "1 distinct" in rows["Datastores"].remarks
+    assert rows["Virtual Machines"].status != summary.NOT_ASSESSED
+    assert "1 running VM" in rows["Virtual Machines"].remarks
+    # EVC genuinely has no host-side source and must remain not assessed.
+    assert rows["EVC Mode"].status == summary.NOT_ASSESSED
+
+
+def test_virtual_machine_inventory_rows_resolve_datastore_name():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        datastores=[Datastore(name="DS01", uuid="uuid-1", naa_ids=[])],
+        virtual_machines=[
+            VirtualMachine(name="vm-b", uuid="vm-uuid-2", datastore_uuid="uuid-1"),
+        ],
+        vm_inventory_available=True,
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = summary.virtual_machine_inventory_rows(assessment)
+    assert len(rows) == 1
+    assert rows[0].name == "vm-b"
+    assert rows[0].host == "h1"
+    assert rows[0].datastore == "DS01"
 
 
 def test_component_status_rows_flags_attention_for_high_severity_finding():

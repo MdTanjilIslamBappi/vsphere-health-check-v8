@@ -43,6 +43,7 @@ def write_html_report(
         component_status_rows=summary.component_status_rows(assessment),
         key_findings=summary.key_findings_at_a_glance(assessment),
         host_inventory_rows=summary.host_inventory_rows(assessment),
+        virtual_machine_inventory_rows=summary.virtual_machine_inventory_rows(assessment),
         detailed_observations=summary.detailed_observations(assessment),
         recommendation_groups=summary.recommendation_groups(assessment),
     )

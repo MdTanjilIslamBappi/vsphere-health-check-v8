@@ -47,6 +47,15 @@ _VCENTER_DB_NOT_PARSED = (
     "not assessed; the vCenter capture contains operational logs and appliance status but "
     "not a readable form of the vCenter inventory database"
 )
+# EVC baseline name, datastore capacity/free-space, and vCenter-level alarms exist only
+# as rows in vCenter's own inventory database (vpxd's PostgreSQL store) -- no diagnostic
+# bundle, from either an ESXi host or the vCenter appliance itself, ever contains a
+# readable export of that database. This is unlike VM identity or datastore *names*,
+# which each ESXi host reports about itself independently of vCenter (see below).
+_VCENTER_DB_FIELDS_UNAVAILABLE = (
+    "is not assessed -- that exists only in vCenter's own inventory database, which no "
+    "support bundle (host or vCenter) contains a readable export of"
+)
 
 _VCENTER_RULE_PREFIX = "vcenter."
 
@@ -73,10 +82,48 @@ SCOPE_ITEMS = _HOST_ONLY_SCOPE_ITEMS
 
 
 def scope_items(assessment: Assessment) -> tuple[str, ...]:
-    """Dynamic Scope section items, adjusted for what the bundle contained."""
+    """Dynamic Scope section items, adjusted for what the bundle contained.
+
+    Datastore *names* and running-VM identity come from each ESXi host's
+    own files and need no vCenter bundle at all; EVC baseline, datastore
+    capacity, full VM inventory, and vCenter-level alarms exist only in
+    vCenter's inventory database, which no bundle type exports.
+    """
     vcenter = assessment.vcenter
+    has_datastore_names = any(h.datastores for h in assessment.hosts)
+    has_vm_inventory = any(h.vm_inventory_available for h in assessment.hosts)
+    if has_datastore_names:
+        datastore_item = (
+            "Datastore names, identified from per-host VMFS volume dumps. Capacity and "
+            f"accessibility {_VCENTER_DB_FIELDS_UNAVAILABLE}"
+        )
+    else:
+        datastore_item = (
+            f"Datastore names -- not assessed; no VMFS volume data found. Capacity and "
+            f"accessibility {_VCENTER_DB_FIELDS_UNAVAILABLE}"
+        )
+    vm_item = (
+        "Running VM identity, from each host's own record of what it is currently "
+        "executing"
+        if has_vm_inventory
+        else "Running VM identity -- not assessed; no localcli vm process list data found"
+    )
+    if has_vm_inventory:
+        vm_item += f". Powered-off VMs and resource utilization {_VCENTER_DB_FIELDS_UNAVAILABLE}"
     if vcenter is None:
-        return _HOST_ONLY_SCOPE_ITEMS
+        return (
+            "ESXi host status and diagnostic data availability",
+            "Storage device, adapter, and SMART health",
+            "Hardware sensor status (IPMI)",
+            "Storage-related log signals (PDL/APD/ALUA/VOB), scoped to the last 90 days",
+            "Server and CPU hardware inventory, including processor compatibility "
+            "across hosts",
+            "Cluster/compute-resource membership, where host-reported in the bundle",
+            f"Cluster EVC mode configuration -- not assessed; {_VCENTER_BUNDLE_REQUIRED}",
+            datastore_item,
+            vm_item,
+            f"vCenter-level active alarms -- not assessed; {_VCENTER_BUNDLE_REQUIRED}",
+        )
     items = [
         "ESXi host status and diagnostic data availability",
         "Storage device, adapter, and SMART health",
@@ -88,8 +135,8 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         "Cluster inventory: cluster names and member hosts, as recovered from the "
         "vCenter operational logs in the capture",
         f"Cluster EVC mode configuration -- {_VCENTER_DB_NOT_PARSED}",
-        f"Datastore capacity and accessibility -- {_VCENTER_DB_NOT_PARSED}",
-        f"Virtual machine inventory and resource utilization -- {_VCENTER_DB_NOT_PARSED}",
+        datastore_item,
+        vm_item,
         f"vCenter-level active alarms -- {_VCENTER_DB_NOT_PARSED}",
     ]
     return tuple(items)
@@ -205,18 +252,40 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
         )
     rows.append(ComponentStatus("Processor Compatibility", cpu_status, cpu_remark))
 
-    datastores_remark = (
-        f"Datastore capacity and accessibility {_VCENTER_DB_NOT_PARSED}"
-        if assessment.vcenter is not None
-        else f"Datastore capacity and accessibility -- not assessed; {_VCENTER_BUNDLE_REQUIRED}"
-    )
-    rows.append(ComponentStatus("Datastores", NOT_ASSESSED, datastores_remark))
-    vms_remark = (
-        f"VM inventory and resource utilization {_VCENTER_DB_NOT_PARSED}"
-        if assessment.vcenter is not None
-        else f"VM inventory and resource utilization -- not assessed; {_VCENTER_BUNDLE_REQUIRED}"
-    )
-    rows.append(ComponentStatus("Virtual Machines", NOT_ASSESSED, vms_remark))
+    hosts_with_datastores = [h for h in hosts if h.datastores]
+    if hosts_with_datastores:
+        datastore_names = {ds.name for h in hosts_with_datastores for ds in h.datastores}
+        datastores_status = "Informational"
+        datastores_remark = (
+            f"{len(datastore_names)} distinct datastore name(s) identified from "
+            f"{len(hosts_with_datastores)} of {total} host(s) (per-volume vmkfstools dumps). "
+            f"Capacity, free space, and vCenter-side compliance status "
+            f"{_VCENTER_DB_FIELDS_UNAVAILABLE}."
+        )
+    else:
+        datastores_status = NOT_ASSESSED
+        datastores_remark = (
+            "Datastore names, capacity, and accessibility -- not assessed; no VMFS volume "
+            "data (vmkfstools) found in this bundle."
+        )
+    rows.append(ComponentStatus("Datastores", datastores_status, datastores_remark))
+
+    hosts_with_vms = [h for h in hosts if h.vm_inventory_available]
+    if hosts_with_vms:
+        running_vms = sum(len(h.virtual_machines) for h in hosts_with_vms)
+        vms_status = "Informational"
+        vms_remark = (
+            f"{running_vms} running VM(s) observed across {len(hosts_with_vms)} of {total} "
+            "host(s), from each host's own record of what it is currently running. "
+            f"Powered-off VMs and resource-utilization history {_VCENTER_DB_FIELDS_UNAVAILABLE}."
+        )
+    else:
+        vms_status = NOT_ASSESSED
+        vms_remark = (
+            "VM inventory -- not assessed; no running-VM data (localcli vm process list) "
+            "found in this bundle."
+        )
+    rows.append(ComponentStatus("Virtual Machines", vms_status, vms_remark))
 
     storage_hw_findings = _by_ids(findings, _STORAGE_HARDWARE_RULE_IDS)
     rows.append(
@@ -338,17 +407,27 @@ def key_findings_at_a_glance(assessment: Assessment) -> list[str]:
     else:
         items.append("No critical or high-severity storage/hardware findings this quarter.")
 
+    datastores_row = next(r for r in rows if r.component == "Datastores")
+    vms_row = next(r for r in rows if r.component == "Virtual Machines")
+    if datastores_row.status != NOT_ASSESSED or vms_row.status != NOT_ASSESSED:
+        items.append(f"{datastores_row.remarks}")
+        items.append(f"{vms_row.remarks}")
+    else:
+        items.append(
+            "Datastore and virtual machine data were not assessed from this bundle "
+            "(see Scope of Health Check)."
+        )
     if assessment.vcenter is None:
         items.append(
-            "EVC mode, datastore, virtual machine, and vCenter-level alarm data were not "
-            "assessed from this bundle type (see Scope of Health Check)."
+            "EVC mode and vCenter-level alarm data were not assessed from this bundle type "
+            "(see Scope of Health Check)."
         )
     else:
         items.append(
             "The vCenter Server appliance was captured in the bundle and its service status, "
-            "appliance disk usage and cluster information were reviewed; EVC mode, datastore, "
-            "virtual machine inventory, and vCenter-level alarm data require vCenter database "
-            "content and remain not assessed (see Scope of Health Check)."
+            "appliance disk usage and cluster information were reviewed; EVC mode and "
+            "vCenter-level alarm data require vCenter database content and remain not "
+            "assessed (see Scope of Health Check)."
         )
     return items
 
@@ -412,6 +491,39 @@ def host_inventory_rows(assessment: Assessment) -> list[HostInventoryRow]:
             )
         )
     return rows
+
+
+@dataclass(frozen=True)
+class VirtualMachineRow:
+    index: int
+    name: str
+    host: str
+    datastore: str
+    uuid: str
+
+
+def virtual_machine_inventory_rows(assessment: Assessment) -> list[VirtualMachineRow]:
+    """Running VMs across all hosts, sorted by name -- see Datastores/Virtual
+
+    Machines component rows for the "powered-on only" caveat this table
+    inherits from its source (``localcli vm process list``).
+    """
+    entries = [
+        (host, vm)
+        for host in assessment.hosts
+        for vm in host.virtual_machines
+    ]
+    entries.sort(key=lambda pair: pair[1].name)
+    return [
+        VirtualMachineRow(
+            index=i,
+            name=vm.name,
+            host=host.hostname,
+            datastore=host.datastore_name_for_uuid(vm.datastore_uuid) or "unknown",
+            uuid=vm.uuid or "unknown",
+        )
+        for i, (host, vm) in enumerate(entries, start=1)
+    ]
 
 
 def detailed_observations(assessment: Assessment) -> list[str]:

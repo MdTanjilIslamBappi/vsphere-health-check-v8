@@ -35,7 +35,8 @@ _SECTION_HEADINGS = (
     "3.1 Current Hardware Status",
     "3.2 Current State Analysis of VMware Components",
     "3.3 Current State Analysis of ESXi Hosts",
-    "3.4 Recommendation",
+    "3.4 Virtual Machine Inventory",
+    "3.5 Recommendation",
 )
 
 
@@ -82,7 +83,10 @@ def write_docx_report(
     for item in summary.detailed_observations(assessment):
         doc.add_paragraph(item, style="List Bullet")
 
-    doc.add_heading("3.4 Recommendation", level=2)
+    doc.add_heading("3.4 Virtual Machine Inventory", level=2)
+    _add_virtual_machine_inventory_table(doc, assessment)
+
+    doc.add_heading("3.5 Recommendation", level=2)
     _add_recommendations(doc, assessment)
 
     doc.add_paragraph()
@@ -421,6 +425,34 @@ def _add_host_inventory_table(doc: Document, assessment: Assessment) -> None:
         cells[2].text = row_data.management_ip
         cells[3].text = row_data.server_model
         cells[4].text = row_data.cpu_model
+
+
+def _add_virtual_machine_inventory_table(doc: Document, assessment: Assessment) -> None:
+    rows = summary.virtual_machine_inventory_rows(assessment)
+    if not rows:
+        doc.add_paragraph(
+            "Not assessed; no running-VM data (localcli vm process list) was found "
+            "in this bundle."
+        )
+        return
+    table = doc.add_table(rows=1, cols=5)
+    table.style = "Light Grid Accent 1"
+    headers = ["S.No", "VM Name", "Host", "Datastore", "UUID"]
+    for i, label in enumerate(headers):
+        table.rows[0].cells[i].text = label
+    for row_data in rows:
+        cells = table.add_row().cells
+        cells[0].text = str(row_data.index)
+        cells[1].text = row_data.name
+        cells[2].text = row_data.host
+        cells[3].text = row_data.datastore
+        cells[4].text = row_data.uuid
+    note = doc.add_paragraph()
+    note.add_run(
+        "Powered-on VMs only, as reported by each host itself at capture time; a support "
+        "bundle has no record of powered-off VMs or resource-utilization history -- that "
+        "lives only in vCenter's own inventory database."
+    ).italic = True
 
 
 def _add_recommendations(doc: Document, assessment: Assessment) -> None:

@@ -11,6 +11,7 @@ from vhealth.parsers import (
     smart,
     storage_core,
     system_version,
+    vm_inventory,
     vmk_log,
 )
 
@@ -68,6 +69,29 @@ def test_datastore_parser_reports_warning_when_no_dump_present(tmp_path):
     warnings = datastore.parse(host_dir, host)
     assert warnings != []
     assert host.datastores == []
+
+
+def test_vm_inventory_parser_extracts_running_vms_and_resolves_datastore(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path, datastore_name="Synthetic-Datastore-01", vm_names=["vm-alpha", "vm-beta"]
+    )
+    datastore.parse(host_dir, host)
+    warnings = vm_inventory.parse(host_dir, host)
+    assert warnings == []
+    assert host.vm_inventory_available is True
+    names = sorted(vm.name for vm in host.virtual_machines)
+    assert names == ["vm-alpha", "vm-beta"]
+    vm = next(v for v in host.virtual_machines if v.name == "vm-alpha")
+    assert vm.uuid is not None
+    assert host.datastore_name_for_uuid(vm.datastore_uuid) == "Synthetic-Datastore-01"
+
+
+def test_vm_inventory_parser_reports_warning_when_file_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = vm_inventory.parse(host_dir, host)
+    assert warnings != []
+    assert host.vm_inventory_available is False
+    assert host.virtual_machines == []
 
 
 def test_vmk_log_evidence_is_annotated_with_datastore_name(tmp_path):
@@ -158,6 +182,7 @@ def test_parsers_report_warnings_when_evidence_missing(tmp_path):
     assert sensors.parse(empty_dir, host) != []
     assert vmk_log.parse(empty_dir, host) != []
     assert hardware_inventory.parse(empty_dir, host) != []
+    assert vm_inventory.parse(empty_dir, host) != []
 
 
 def test_hardware_inventory_parser_extracts_server_and_cpu_model(tmp_path):

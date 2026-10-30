@@ -74,7 +74,8 @@
         <li><a href="#hardware-status">3.1 Current Hardware Status</a></li>
         <li><a href="#component-status">3.2 Current State Analysis of VMware Components</a></li>
         <li><a href="#host-inventory">3.3 Current State Analysis of ESXi Hosts</a></li>
-        <li><a href="#recommendation">3.4 Recommendation</a></li>
+        <li><a href="#vm-inventory">3.4 Virtual Machine Inventory</a></li>
+        <li><a href="#recommendation">3.5 Recommendation</a></li>
       </ul>
     </li>
   </ul>
@@ -159,7 +160,28 @@
   <p><strong>Detailed Observations</strong></p>
   <ul>{% for item in detailed_observations %}<li>{{ item }}</li>{% endfor %}</ul>
 
-  <h3 id="recommendation">3.4 Recommendation</h3>
+  <h3 id="vm-inventory">3.4 Virtual Machine Inventory</h3>
+  {% if virtual_machine_inventory_rows %}
+  <table>
+    <tr><th>S.No</th><th>VM Name</th><th>Host</th><th>Datastore</th><th>UUID</th></tr>
+    {% for row in virtual_machine_inventory_rows %}
+    <tr>
+      <td>{{ row.index }}</td>
+      <td>{{ row.name }}</td>
+      <td>{{ row.host }}</td>
+      <td>{{ row.datastore }}</td>
+      <td>{{ row.uuid }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="muted">Powered-on VMs only, as reported by each host itself at capture time;
+     a support bundle has no record of powered-off VMs or resource-utilization history --
+     that lives only in vCenter's own inventory database.</p>
+  {% else %}
+  <p>Not assessed; no running-VM data (localcli vm process list) was found in this bundle.</p>
+  {% endif %}
+
+  <h3 id="recommendation">3.5 Recommendation</h3>
   {% for g in recommendation_groups %}
   <div class="recommendation">
     <h3>{{ g.title }}</h3>

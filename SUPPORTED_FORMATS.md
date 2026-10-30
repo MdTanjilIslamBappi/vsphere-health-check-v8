@@ -73,14 +73,33 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
   `hpssacli`/`ssacli`) are not parsed; this tool reads what `vm-support`
   captures via `esxcli`/IPMI, not vendor-specific RAID CLI output, which
   `vm-support` does not run by default.
-- **vCenter-side data** (vSAN health, EVC/cluster/HA configuration, vpxd
-  logs, vCenter alarms, VM-level state) in a vCenter support bundle is not
-  parsed; only the per-host ESXi `vm-support` members inside it are. The
+- **vCenter support bundle (the `vc-` member).** The vCenter appliance's
+  own identity, version, `service-control` service status, and appliance
+  filesystem usage are parsed (`parsers/vcenter.py`), as is cluster
+  name/moref and vCLS-membership data recovered from `vpxd`'s current
+  operational log. What is *not*, and cannot be, parsed from any support
+  bundle (host or vCenter) is anything that lives only in vCenter's own
+  inventory database: EVC baseline, datastore capacity/free-space and
+  vCenter-side compliance status, full VM inventory (including
+  powered-off VMs) and resource-utilization history, and vCenter-level
+  active alarms. vCenter's `vc-support.sh` does not export that database
+  -- confirmed by inspecting a real bundle's `storage/db/vpostgres/`
+  directory, which contains only Postgres config files, no data. The
+  report's "Scope of Health Check" section spells out this distinction
+  per item.
+- **Running VM identity and datastore names are host-reported, not
+  vCenter-reported.** `vm_inventory.py` reads each ESXi host's own
+  `localcli vm process list` output (which VMs that host is *currently
+  running*), and `datastore.py` reads each host's own `vmkfstools -P -v
+  10` dumps (datastore name/UUID). Both work from an ESXi host bundle
+  alone, with no vCenter member required, and both have real gaps: a
+  powered-off VM, or one with no running world at capture time, will not
+  appear; a VMFS volume mounted only via its UUID symlink with no
+  friendly-name symlink captured will not have a name to resolve to. The
   `clusterAdmin_cluster-status.txt` cluster ID parsed by
-  `hardware_inventory.py` is a host-reported fact (which compute resource
-  this host currently thinks it belongs to), not a read of vCenter's
-  actual cluster/EVC/HA configuration -- the report's "3.5 Not Assessed
-  From This Bundle" section spells out this distinction.
+  `hardware_inventory.py` is likewise a host-reported fact (which compute
+  resource this host currently thinks it belongs to), not a read of
+  vCenter's actual cluster/EVC/HA configuration.
 - **Management IP selection** in `hardware_inventory.py` assumes `vmk0` is
   the management VMkernel NIC, which is the common ESXi convention but not
   a guarantee -- a host reconfigured to manage over a different vmknic

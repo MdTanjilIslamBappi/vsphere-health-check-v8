@@ -43,6 +43,23 @@ class Datastore(BaseModel):
     naa_ids: list[str] = Field(default_factory=list)
 
 
+class VirtualMachine(BaseModel):
+    """A powered-on VM, as reported by the host itself (localcli vm process list).
+
+    Only VMs running *at capture time* appear here -- a support bundle has
+    no record of powered-off VMs, since that inventory lives solely in
+    vCenter's own database. ``datastore_uuid`` is the first path segment
+    of ``config_path`` (``/vmfs/volumes/<uuid>/...``); resolve it to a
+    name via ``HostInfo.datastore_name_for_uuid``.
+    """
+
+    name: str
+    uuid: str | None = None
+    world_id: str | None = None
+    config_path: str | None = None
+    datastore_uuid: str | None = None
+
+
 class HardwareSensor(BaseModel):
     """An IPMI/SDR hardware sensor reading (fan, temp, voltage, PSU)."""
 
@@ -77,6 +94,8 @@ class HostInfo(BaseModel):
     storage_adapters: list[StorageAdapter] = Field(default_factory=list)
     storage_devices: list[StorageDevice] = Field(default_factory=list)
     datastores: list[Datastore] = Field(default_factory=list)
+    virtual_machines: list[VirtualMachine] = Field(default_factory=list)
+    vm_inventory_available: bool = False
     sensors: list[HardwareSensor] = Field(default_factory=list)
     log_events: list[str] = Field(default_factory=list)
     log_signal_counts: dict[str, int] = Field(default_factory=dict)
@@ -102,6 +121,15 @@ class HostInfo(BaseModel):
         naa_id = naa_id.lower()
         for ds in self.datastores:
             if naa_id in (n.lower() for n in ds.naa_ids):
+                return ds.name
+        return None
+
+    def datastore_name_for_uuid(self, datastore_uuid: str | None) -> str | None:
+        """Look up a datastore's name from its VMFS UUID (a VM's mount-point segment)."""
+        if not datastore_uuid:
+            return None
+        for ds in self.datastores:
+            if ds.uuid and ds.uuid.lower() == datastore_uuid.lower():
                 return ds.name
         return None
 

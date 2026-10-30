@@ -16,6 +16,25 @@ def test_run_assessment_on_single_host_tgz(tmp_path):
     assert "storage.smart_health_not_ok" in rule_ids
 
 
+def test_run_assessment_reports_running_vms_without_any_vcenter_bundle(tmp_path):
+    """Running-VM identity and datastore names come from the ESXi host
+
+    itself; they must be assessed even when no vCenter member is in the
+    bundle at all.
+    """
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz", datastore_name="Prod-DS01", vm_names=["vm-one", "vm-two"]
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    host = assessment.hosts[0]
+    assert host.vm_inventory_available is True
+    vm_names = sorted(vm.name for vm in host.virtual_machines)
+    assert vm_names == ["vm-one", "vm-two"]
+    assert host.datastore_name_for_uuid(host.virtual_machines[0].datastore_uuid) == "Prod-DS01"
+
+
 def test_run_assessment_on_multi_host_vcenter_zip(tmp_path):
     bundle_path = build_vcenter_zip(
         tmp_path / "vc.zip", hostnames=["esxi-a.example.test", "esxi-b.example.test"]

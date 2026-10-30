@@ -86,12 +86,18 @@ def build_host_dir(
     cluster_id: str = "cluster-synthetic-01",
     cluster_in_alarm: bool = False,
     datastore_name: str | None = None,
+    vm_names: list[str] | None = None,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
     ``minimal_capture=True`` mimics a reduced/incident-mode vm-support run
     (observed in real EAMSC2 bundles): only README and system-version are
     present, with no storage-core, SMART, IPMI, or log data at all.
+
+    ``vm_names``, if given, adds a ``localcli vm process list`` dump
+    reporting each name as a running VM, with its Config File path on
+    the ``datastore_name`` volume (if also given) so datastore resolution
+    can be exercised end to end.
 
     ``datastore_name``, if given, adds a ``vmkfstools -P -v 10`` dump for a
     VMFS datastore backed by the synthetic SAN disk
@@ -232,6 +238,23 @@ def build_host_dir(
             / "commands"
             / f"vmkfstools_-P--v-10-vmfsvolumes{datastore_name}.txt"
         ).write_text(vmkfstools_dump, encoding="utf-8")
+
+    if vm_names is not None:
+        datastore_uuid = "6000000-0000000-0000-000000000001"
+        blocks = []
+        for i, vm_name in enumerate(vm_names, start=1):
+            blocks.append(
+                f"{vm_name}:\n"
+                f"   World ID: {1000 + i}\n"
+                "   Process ID: 0\n"
+                f"   VMX Cartel ID: {1000 + i - 1}\n"
+                f"   UUID: 42 14 00 00 00 00 00 0{i}-00 00 00 00 00 00 00 0{i}\n"
+                f"   Display Name: {vm_name}\n"
+                f"   Config File: /vmfs/volumes/{datastore_uuid}/{vm_name}/{vm_name}.vmx\n"
+            )
+        (bundle_dir / "commands" / "localcli_vm-process-list.txt").write_text(
+            "\n".join(blocks), encoding="utf-8"
+        )
 
     return bundle_dir
 

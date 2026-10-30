@@ -15,6 +15,7 @@ from vhealth.parsers import (
     smart,
     storage_core,
     system_version,
+    vm_inventory,
     vmk_log,
 )
 
@@ -23,6 +24,7 @@ PARSER_MODULES = [
     system_version,
     storage_core,
     datastore,
+    vm_inventory,
     smart,
     sensors,
     vmk_log,
