@@ -15,6 +15,7 @@ rule to add a row here in the same change.
 | `storage.path_dead_detected` | Dead storage path/device detected in vmkwarning log | High | `log_signal_counts.path_dead`, `log_events` | Same log-retention caveat as PDL. |
 | `storage.alua_path_connectivity` | Repeated ALUA path-connectivity errors detected | Medium | `log_signal_counts.alua_no_connection`, `log_events` | Only fires at 3+ occurrences to avoid flagging a single transient blip; the threshold is a heuristic, not a vendor-documented number. |
 | `storage.vob_problem_event` | VMkernel Observation (VOB) flagged a storage problem event | Medium | `log_signal_counts.vob_storage_problem`, `log_events` | vobd only logs events ESXi itself classified as `esx.problem.*`; it is not a complete list of storage issues. |
+| `coverage.limited_diagnostic_data` | Limited diagnostic data available in this support bundle | Low (Info if only 1-2 categories missing) | `coverage()` -- derived from `storage_adapters`/`storage_devices`/`smart_data`/`hardware_sensors`/`log_signals` presence | Reports what is missing, not why; cannot distinguish a reduced/incident-mode vm-support capture from hardware that genuinely has nothing to report (e.g. no local disks). |
 
 ## Validation status
 
@@ -25,6 +26,19 @@ during development (not committed to this repository -- see
 documented VMware log wording for an APD event but has not yet been
 observed firing against real data; treat it as unverified until it has
 been.
+
+`coverage.limited_diagnostic_data` was added after validating against 12
+real EAMSC2 ESXi 8.0.3 bundles (locally, not committed): 11 of the 12 had
+full esxcli storage-core/SMART/log data and raised real storage findings
+as expected; one (`eamsc2esxi01`) turned out to be a reduced/incident-mode
+`vm-support` capture missing storage-core, SMART, and log data entirely,
+and previously assessed as "0 findings" with no indication that most
+checks had not actually run. This rule exists specifically to make that
+distinction visible instead of silent. While fixing this, a related bug
+was also found and fixed: the `log_signals` coverage flag was computing
+"did a bad signal fire" instead of "was log data present to check",
+which would have wrongly marked every host with clean logs as having no
+log coverage at all -- see `CHANGELOG.md`.
 
 ## Adding a rule
 

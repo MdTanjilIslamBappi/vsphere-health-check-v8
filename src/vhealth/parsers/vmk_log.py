@@ -52,6 +52,7 @@ def parse(host_dir: Path, host: HostInfo) -> list[str]:
         matched_rotation = _scan_rotations(log_dir, stem, signals, host)
         found_any_rotation = found_any_rotation or matched_rotation
 
+    host.log_data_available = found_any_rotation
     if not found_any_rotation:
         warnings.append(
             "No vmkwarning/vobd rotations found; storage/hardware log signals unavailable"

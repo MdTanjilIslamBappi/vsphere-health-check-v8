@@ -23,8 +23,9 @@ from vhealth.models.assessment import (
     EvidenceManifestEntry,
     ProcessingWarning,
 )
+from vhealth.models.host import COVERAGE_CATEGORIES
 from vhealth.parsers import PARSER_VERSIONS
-from vhealth.rules import ALL_RULES, RULE_ENGINE_VERSION
+from vhealth.rules import RULE_ENGINE_VERSION, evaluate_all
 from vhealth.utils.hashing import sha256_file
 
 _EVIDENCE_RELATIVE_PATHS = [
@@ -63,11 +64,7 @@ def run_assessment(input_path: Path, output_dir: Path, config: AssessmentConfig)
         for warning in host.parse_warnings:
             processing_warnings.append(ProcessingWarning(source=host.hostname, message=warning))
 
-    enabled_rules = [r for r in ALL_RULES if r.rule_id not in config.disabled_rules]
-    findings = []
-    for host in hosts:
-        for rule in enabled_rules:
-            findings.extend(rule.run(host))
+    findings = evaluate_all(hosts, config.disabled_rules)
 
     evidence_manifest = _build_evidence_manifest(bundle_refs)
     supported_format_coverage = _build_format_coverage(hosts)
@@ -105,23 +102,10 @@ def _build_evidence_manifest(bundle_refs) -> list[EvidenceManifestEntry]:
 
 
 def _build_format_coverage(hosts) -> dict[str, bool]:
-    coverage = {
-        "readme": False,
-        "system_version": False,
-        "storage_adapters": False,
-        "storage_devices": False,
-        "smart_data": False,
-        "hardware_sensors": False,
-        "log_signals": False,
-    }
+    coverage = dict.fromkeys(COVERAGE_CATEGORIES, False)
     for host in hosts:
-        coverage["readme"] |= host.captured_on is not None
-        coverage["system_version"] |= host.esxi_version is not None
-        coverage["storage_adapters"] |= len(host.storage_adapters) > 0
-        coverage["storage_devices"] |= len(host.storage_devices) > 0
-        coverage["smart_data"] |= any(d.smart_overall_health for d in host.storage_devices)
-        coverage["hardware_sensors"] |= len(host.sensors) > 0
-        coverage["log_signals"] |= bool(host.log_signal_counts)
+        for category, present in host.coverage().items():
+            coverage[category] |= present
     return coverage
 
 

@@ -46,12 +46,17 @@ def build_host_dir(
     smart_health: str = "OK",
     sensor_asserted: bool = False,
     include_pdl_warning: bool = False,
+    minimal_capture: bool = False,
 ) -> Path:
-    """Create a synthetic vm-support host directory tree under ``root``."""
+    """Create a synthetic vm-support host directory tree under ``root``.
+
+    ``minimal_capture=True`` mimics a reduced/incident-mode vm-support run
+    (observed in real EAMSC2 bundles): only README and system-version are
+    present, with no storage-core, SMART, IPMI, or log data at all.
+    """
     bundle_dir = root / f"esx-{hostname}-2026-01-15--10.00-9999999"
     (bundle_dir / "commands").mkdir(parents=True)
     (bundle_dir / "json").mkdir()
-    (bundle_dir / "var" / "run" / "log").mkdir(parents=True)
 
     (bundle_dir / "README").write_text(_README, encoding="utf-8")
     (bundle_dir / "commands" / "localcli_system-version-get.txt").write_text(
@@ -60,6 +65,11 @@ def build_host_dir(
     (bundle_dir / "commands" / "uname_-a.txt").write_text(
         _UNAME.format(hostname=hostname), encoding="utf-8"
     )
+
+    if minimal_capture:
+        return bundle_dir
+
+    (bundle_dir / "var" / "run" / "log").mkdir(parents=True)
 
     adapters = [
         {

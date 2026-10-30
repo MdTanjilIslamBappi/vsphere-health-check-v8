@@ -14,11 +14,77 @@ from vhealth.ingestion import extract_bundle
 from vhealth.ingestion.exceptions import VHealthError
 from vhealth.models.assessment import Assessment
 from vhealth.pipeline import run_assessment
-from vhealth.reporting import write_docx_report, write_html_report
+from vhealth.reporting import ReportAuthorship, write_docx_report, write_html_report
 
 EXIT_OK = 0
 EXIT_INPUT_ERROR = 2
 EXIT_UNEXPECTED_ERROR = 3
+
+
+def _authorship_options(f):
+    """Shared --engineer/--author/--verifier/--no-prompt options for report-producing commands."""
+    f = click.option(
+        "--verifier",
+        "verifier_name",
+        default=None,
+        help="Name of the person who verified/reviewed this report; shown on the cover page.",
+    )(f)
+    f = click.option(
+        "--author",
+        "report_author",
+        default=None,
+        help="Name of this report version's author; shown on the cover page.",
+    )(f)
+    f = click.option(
+        "--engineer",
+        "engineer_name",
+        default=None,
+        help="Name of the engineer who performed the assessment; shown on the cover page.",
+    )(f)
+    f = click.option(
+        "--no-prompt",
+        is_flag=True,
+        default=False,
+        help="Never prompt interactively for engineer/author/verifier; leave any unset.",
+    )(f)
+    return f
+
+
+def _resolve_authorship(
+    engineer_name: str | None,
+    report_author: str | None,
+    verifier_name: str | None,
+    no_prompt: bool,
+) -> ReportAuthorship:
+    """Fill in any of engineer/author/verifier not given on the command line.
+
+    Only prompts interactively when attached to a real terminal and
+    --no-prompt was not given; a non-interactive run (CI, a script) simply
+    leaves whatever was not passed as a flag unset rather than hanging.
+    """
+    if no_prompt or not sys.stdin.isatty():
+        return ReportAuthorship(
+            engineer_name=engineer_name, author=report_author, verifier=verifier_name
+        )
+
+    if engineer_name is None:
+        engineer_name = click.prompt(
+            "Engineer name (for the report cover page, press Enter to skip)",
+            default="",
+            show_default=False,
+        ).strip() or None
+    if report_author is None:
+        report_author = click.prompt(
+            "Report author (press Enter to skip)", default="", show_default=False
+        ).strip() or None
+    if verifier_name is None:
+        verifier_name = click.prompt(
+            "Verified by (press Enter to skip)", default="", show_default=False
+        ).strip() or None
+
+    return ReportAuthorship(
+        engineer_name=engineer_name, author=report_author, verifier=verifier_name
+    )
 
 
 @click.group()
@@ -96,10 +162,21 @@ def inspect(input_path: Path) -> None:
     default=False,
     help="Do not delete the extracted bundle contents after assessment.",
 )
+@_authorship_options
 def assess(
-    input_path: Path, output_dir: Path, config_path: Path | None, formats: str, keep_extracted: bool
+    input_path: Path,
+    output_dir: Path,
+    config_path: Path | None,
+    formats: str,
+    keep_extracted: bool,
+    engineer_name: str | None,
+    report_author: str | None,
+    verifier_name: str | None,
+    no_prompt: bool,
 ) -> None:
     """Run ingestion, parsing, correlation and rules, then write reports."""
+    authorship = _resolve_authorship(engineer_name, report_author, verifier_name, no_prompt)
+
     try:
         config = load_config(config_path)
         assessment = run_assessment(input_path, output_dir, config)
@@ -114,7 +191,7 @@ def assess(
     assessment_path.write_text(assessment.model_dump_json(indent=2), encoding="utf-8")
     click.echo(f"Wrote {assessment_path}")
 
-    _generate_reports(assessment, config, output_dir, formats)
+    _generate_reports(assessment, config, output_dir, formats, authorship)
 
     if not keep_extracted:
         for child in output_dir.iterdir():
@@ -156,8 +233,20 @@ def assess(
     default=None,
     help="Optional TOML configuration file overriding the bundled defaults.",
 )
-def report(assessment_path: Path, formats: str, output_dir: Path, config_path: Path | None) -> None:
+@_authorship_options
+def report(
+    assessment_path: Path,
+    formats: str,
+    output_dir: Path,
+    config_path: Path | None,
+    engineer_name: str | None,
+    report_author: str | None,
+    verifier_name: str | None,
+    no_prompt: bool,
+) -> None:
     """Re-render reports from an existing assessment.json, without re-parsing the bundle."""
+    authorship = _resolve_authorship(engineer_name, report_author, verifier_name, no_prompt)
+
     try:
         assessment = Assessment.model_validate_json(assessment_path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
@@ -166,19 +255,25 @@ def report(assessment_path: Path, formats: str, output_dir: Path, config_path: P
 
     output_dir.mkdir(parents=True, exist_ok=True)
     config = load_config(config_path)
-    _generate_reports(assessment, config, output_dir, formats)
+    _generate_reports(assessment, config, output_dir, formats, authorship)
     sys.exit(EXIT_OK)
 
 
-def _generate_reports(assessment: Assessment, config, output_dir: Path, formats: str) -> None:
+def _generate_reports(
+    assessment: Assessment,
+    config,
+    output_dir: Path,
+    formats: str,
+    authorship: ReportAuthorship | None = None,
+) -> None:
     requested = {f.strip().lower() for f in formats.split(",") if f.strip()}
     if "html" in requested:
         html_path = output_dir / "report.html"
-        write_html_report(assessment, config, html_path)
+        write_html_report(assessment, config, html_path, authorship)
         click.echo(f"Wrote {html_path}")
     if "docx" in requested:
         docx_path = output_dir / "report.docx"
-        write_docx_report(assessment, config, docx_path)
+        write_docx_report(assessment, config, docx_path, authorship)
         click.echo(f"Wrote {docx_path}")
 
 

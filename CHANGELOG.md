@@ -13,6 +13,18 @@ and the "Known limitations" section of [README.md](README.md)).
 
 ### Added
 
+- `--engineer`/`--author`/`--verifier` options on `assess` and `report`,
+  shown on the cover page of both the HTML and DOCX reports. Any left
+  unset are prompted for interactively (press Enter to skip); `--no-prompt`
+  or a non-interactive run (CI, a script) leaves them unset instead of
+  hanging on a prompt. Not stored in `assessment.json` -- a report can be
+  re-rendered later (e.g. a verifier adding their name) without re-running
+  the assessment.
+- `coverage.limited_diagnostic_data` rule: raises a visible finding (not
+  just a buried metadata flag) when a bundle is missing whole categories
+  of diagnostic data (storage-core, SMART, IPMI, or log signals), so a
+  short findings list can't be misread as "all checked, all clean" when
+  it may really mean "mostly unchecked". See RULE_CATALOG.md.
 - `vhealth` CLI (`inspect`, `assess`, `report`, `--version`) built on Click.
 - Safe, offline extraction of `.zip` and `.tgz` support bundles with
   zip-slip protection, size/entry/compression-ratio limits, and graceful
@@ -46,6 +58,26 @@ and the "Known limitations" section of [README.md](README.md)).
   `vhealth-windows-amd64.exe` (~18 MB) ran `--version` and a full
   `assess` (bundled templates/config/schema included) outside the repo
   and outside the dev virtualenv. **Not yet built or tested on Linux.**
+
+### Fixed
+
+- `supported_format_coverage.log_signals` (and the new coverage rule built
+  on the same data) previously computed "did a bad signal fire in the
+  logs" rather than "was log data present to check" -- a perfectly
+  healthy host with clean vmkwarning/vobd logs was wrongly reported as
+  having no log coverage at all. Found while validating against real
+  data; fixed by tracking whether log rotations were found, independent
+  of whether anything in them matched a known-bad pattern.
+
+### Validated
+
+- Re-ran the full tool against all 12 real EAMSC2 ESXi 8.0.3 `vm-support`
+  bundles (locally, never committed -- see CONTRIBUTING.md). All 12
+  completed without error; 11 had full diagnostic data and raised real
+  storage findings (PDL, ALUA, VOB, a dead-state device); one
+  (`eamsc2esxi01`) turned out to be a reduced/incident-mode capture
+  missing storage-core/SMART/log data entirely, which is what led to the
+  `coverage.limited_diagnostic_data` rule and the `log_signals` fix above.
 
 ### Known limitations
 

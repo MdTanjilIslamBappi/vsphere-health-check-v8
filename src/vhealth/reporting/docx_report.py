@@ -3,12 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from docx import Document
+from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, RGBColor
 
 from vhealth.config import AssessmentConfig
 from vhealth.models.assessment import Assessment
 from vhealth.models.findings import Severity
+from vhealth.reporting.authorship import ReportAuthorship
 
 VERSION = "1.0.0"
 
@@ -21,10 +23,15 @@ _SEVERITY_COLOR = {
 }
 
 
-def write_docx_report(assessment: Assessment, config: AssessmentConfig, output_path: Path) -> None:
+def write_docx_report(
+    assessment: Assessment,
+    config: AssessmentConfig,
+    output_path: Path,
+    authorship: ReportAuthorship | None = None,
+) -> None:
     doc = Document()
 
-    _add_title_page(doc, assessment, config)
+    _add_title_page(doc, assessment, config, authorship or ReportAuthorship())
     doc.add_page_break()
 
     doc.add_heading("1. Executive Summary", level=1)
@@ -53,7 +60,9 @@ def write_docx_report(assessment: Assessment, config: AssessmentConfig, output_p
     doc.save(str(output_path))
 
 
-def _add_title_page(doc: Document, assessment: Assessment, config: AssessmentConfig) -> None:
+def _add_title_page(
+    doc: Document, assessment: Assessment, config: AssessmentConfig, authorship: ReportAuthorship
+) -> None:
     title = doc.add_paragraph()
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run = title.add_run(config.report.title)
@@ -74,6 +83,21 @@ def _add_title_page(doc: Document, assessment: Assessment, config: AssessmentCon
         f"Input: {assessment.metadata.input_filename}\n"
         f"SHA-256: {assessment.metadata.input_sha256}"
     ).font.size = Pt(10)
+
+    if not authorship.is_empty:
+        table = doc.add_table(rows=0, cols=2)
+        table.style = "Light List Accent 1"
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        for label, value in [
+            ("Engineer", authorship.engineer_name),
+            ("Author", authorship.author),
+            ("Verified by", authorship.verifier),
+        ]:
+            if not value:
+                continue
+            cells = table.add_row().cells
+            cells[0].text = label
+            cells[1].text = value
 
 
 def _add_executive_summary(doc: Document, assessment: Assessment) -> None:

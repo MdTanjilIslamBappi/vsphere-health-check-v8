@@ -46,6 +46,13 @@
      rule engine {{ assessment.metadata.rule_engine_version }}</div>
   <div class="meta">Input: {{ assessment.metadata.input_filename }}
      (sha256 {{ assessment.metadata.input_sha256[:16] }}&hellip;)</div>
+  {% if authorship.engineer_name or authorship.author or authorship.verifier %}
+  <div class="meta">
+    {% if authorship.engineer_name %}Engineer: {{ authorship.engineer_name }}{% endif %}
+    {% if authorship.author %}{% if authorship.engineer_name %} &middot; {% endif %}Author: {{ authorship.author }}{% endif %}
+    {% if authorship.verifier %}{% if authorship.engineer_name or authorship.author %} &middot; {% endif %}Verified by: {{ authorship.verifier }}{% endif %}
+  </div>
+  {% endif %}
 </header>
 <main>
 

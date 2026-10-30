@@ -169,12 +169,31 @@ When it finishes it prints a one-line summary, e.g.:
 Assessment complete: 2 host(s), 5 finding(s).
 ```
 
+If you don't pass `--engineer`, `--author`, or `--verifier` (see below),
+vhealth will ask you for each one on screen — just press Enter to leave
+any of them blank.
+
 **Re-generate just the reports later** (e.g. you want a DOCX now and only
 generated HTML before), without re-reading the bundle:
 
 ```bash
 vhealth report --assessment .\out\assessment.json --format docx --output .\out
 ```
+
+**Putting your name on the report:** the cover page of both the HTML and
+Word reports can show who performed the assessment, who authored this
+particular report, and who verified it:
+
+```bash
+vhealth assess --input path\to\your-bundle.zip --output .\out `
+  --engineer "Jane Doe" --author "Jane Doe" --verifier "John Smith"
+```
+
+Skip any of these on the command line and vhealth will ask for them
+interactively instead (press Enter to leave one blank). If you're running
+vhealth from a script and don't want it to ever stop and ask, add
+`--no-prompt` — any name you didn't pass as a flag is then just left off
+the report.
 
 ## 8. Reading the report
 

@@ -84,6 +84,24 @@ Optional branding/behaviour overrides go in a TOML config file, passed with
 `--config`; see [`src/vhealth/resources/defaults/config.default.toml`](src/vhealth/resources/defaults/config.default.toml)
 for every available key and its default.
 
+### Crediting who prepared the report
+
+`assess` and `report` both accept `--engineer`, `--author`, and
+`--verifier`, which appear on the cover page of the HTML and DOCX
+reports:
+
+```bash
+vhealth assess --input support-bundle.zip --output ./out \
+  --engineer "Jane Doe" --author "Jane Doe" --verifier "John Smith"
+```
+
+Leave any of them off and you'll be prompted for it interactively (press
+Enter to skip); pass `--no-prompt` to skip the prompts entirely and leave
+them unset, which also happens automatically in a non-interactive run
+(CI, a script). None of this is written into `assessment.json` -- a
+verifier can add their name on a later `vhealth report` re-render without
+re-running the assessment.
+
 ## How it works
 
 1. **Ingestion** — the archive is extracted under strict safety limits

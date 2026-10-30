@@ -48,3 +48,18 @@ def test_findings_carry_remediation_and_limitations(tmp_path):
     assert finding.remediation
     assert finding.limitations
     assert finding.affected_host == host.hostname
+
+
+def test_minimal_capture_host_raises_coverage_finding(tmp_path):
+    host = _assessed_host(tmp_path, minimal_capture=True)
+    findings = evaluate_all([host])
+    coverage_findings = [f for f in findings if f.rule_id == "coverage.limited_diagnostic_data"]
+    assert len(coverage_findings) == 1
+    assert coverage_findings[0].severity.value == "low"
+    assert len(coverage_findings[0].evidence) == 5
+
+
+def test_disabled_rules_are_excluded(tmp_path):
+    host = _assessed_host(tmp_path, smart_health="FAILED")
+    findings = evaluate_all([host], disabled_rules=("storage.smart_health_not_ok",))
+    assert "storage.smart_health_not_ok" not in {f.rule_id for f in findings}

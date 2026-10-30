@@ -40,6 +40,17 @@ class HardwareSensor(BaseModel):
     sensor_type: str | None = None
 
 
+COVERAGE_CATEGORIES = (
+    "readme",
+    "system_version",
+    "storage_adapters",
+    "storage_devices",
+    "smart_data",
+    "hardware_sensors",
+    "log_signals",
+)
+
+
 class HostInfo(BaseModel):
     """Parsed, normalised data for a single ESXi host bundle."""
 
@@ -54,4 +65,22 @@ class HostInfo(BaseModel):
     sensors: list[HardwareSensor] = Field(default_factory=list)
     log_events: list[str] = Field(default_factory=list)
     log_signal_counts: dict[str, int] = Field(default_factory=dict)
+    log_data_available: bool = False
     parse_warnings: list[str] = Field(default_factory=list)
+
+    def coverage(self) -> dict[str, bool]:
+        """Which diagnostic data categories vhealth actually found for this host.
+
+        ``log_signals`` reflects whether vmkwarning/vobd rotations were found
+        at all, not whether any rotation contained a matching bad signal --
+        a healthy host with clean logs must show as covered, not missing.
+        """
+        return {
+            "readme": self.captured_on is not None,
+            "system_version": self.esxi_version is not None,
+            "storage_adapters": len(self.storage_adapters) > 0,
+            "storage_devices": len(self.storage_devices) > 0,
+            "smart_data": any(d.smart_overall_health for d in self.storage_devices),
+            "hardware_sensors": len(self.sensors) > 0,
+            "log_signals": self.log_data_available,
+        }
