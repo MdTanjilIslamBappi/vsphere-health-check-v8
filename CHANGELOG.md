@@ -133,6 +133,21 @@ and the "Known limitations" section of [README.md](README.md)).
   `PartnerSupported`, zero `CommunitySupported`); the firing case has
   not yet been observed against real data and is covered by a
   synthetic test only.
+- `storage.multipath_all_paths_dead` / `storage.multipath_reduced_redundancy`
+  rules and `multipath.py` parser: reads each ESXi host's own `esxcli
+  storage nmp path list` output and aggregates path state per device,
+  flagging a device with some or all of its known paths reporting
+  `Group State: dead`. Unlike the vmkwarning-log-derived
+  `storage.path_dead_detected`, this is a direct point-in-time
+  snapshot, so it also catches a path that has been dead since before
+  the oldest retained log rotation. Folded into the existing "Storage
+  & Hardware Findings" component row rather than a new one, same as
+  the other storage rules. **Fired against real data on first try**:
+  the real 10-host EAMSC2 bundle has device
+  `naa.600507688283b1c88000000000000007` ("IBM Fibre Channel Disk")
+  with its one and only known path dead on both `eamsc2esxi08` and
+  `eamsc2esxi09` -- a genuine, previously-unreported storage-access
+  problem this rule caught.
 
 ### Fixed
 

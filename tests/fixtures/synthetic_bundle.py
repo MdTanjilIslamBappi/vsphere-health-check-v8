@@ -91,6 +91,8 @@ def build_host_dir(
     ntp_time_synchronized: bool | None = None,
     coredump_configured: bool | None = None,
     community_supported_vibs: list[str] | None = None,
+    multipath_dead_paths: int | None = None,
+    multipath_total_paths: int = 2,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -124,6 +126,12 @@ def build_host_dir(
     ``esxcli software vib list`` dump with one baseline VMwareCertified
     row plus one CommunitySupported row per listed name; left as
     ``None``, no VIB data is written at all (VIB level not assessed).
+
+    ``multipath_dead_paths``, if given, adds an ``esxcli storage nmp
+    path list`` dump for one synthetic device with ``multipath_total_paths``
+    path blocks, the first ``multipath_dead_paths`` of them marked
+    ``Group State: dead`` and the rest ``active``; left as ``None``, no
+    multipath data is written at all (multipath state not assessed).
     """
     bundle_dir = root / f"esx-{hostname}-2026-01-15"
     (bundle_dir / "commands").mkdir(parents=True)
@@ -333,6 +341,23 @@ def build_host_dir(
             )
         (bundle_dir / "commands" / "localcli_software-vib-list.txt").write_text(
             "\n".join(lines) + "\n", encoding="utf-8"
+        )
+
+    if multipath_dead_paths is not None:
+        device_id = "naa.6000000000000000000000000000099"
+        blocks = []
+        for i in range(multipath_total_paths):
+            state = "dead" if i < multipath_dead_paths else "active"
+            blocks.append(
+                f"fc.synthetic{i}:synthetic{i}-fc.synthetic-target:synthetic-{device_id}:\n"
+                f"   Runtime Name: vmhba{i}:C0:T0:L0\n"
+                f"   Device: {device_id}\n"
+                "   Device Display Name: Synthetic Fibre Channel Disk\n"
+                f"   Group State: {state}\n"
+                "   Array Priority: 0\n"
+            )
+        (bundle_dir / "commands" / "localcli_storage-nmp-path-list.txt").write_text(
+            "\n".join(blocks), encoding="utf-8"
         )
 
     return bundle_dir

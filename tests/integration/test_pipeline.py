@@ -93,6 +93,20 @@ def test_run_assessment_flags_host_with_community_supported_vib(tmp_path):
     assert "hardware.community_supported_vib_installed" in rule_ids
 
 
+def test_run_assessment_flags_host_with_all_multipath_paths_dead(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz", multipath_dead_paths=2, multipath_total_paths=2
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    host = assessment.hosts[0]
+    assert host.multipath_data_available is True
+    assert host.multipath_devices[0].dead_paths == 2
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "storage.multipath_all_paths_dead" in rule_ids
+
+
 def test_run_assessment_on_multi_host_vcenter_zip(tmp_path):
     bundle_path = build_vcenter_zip(
         tmp_path / "vc.zip", hostnames=["esxi-a.example.test", "esxi-b.example.test"]

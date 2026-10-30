@@ -39,7 +39,13 @@ _PROCESSOR_RULE_IDS = {"fleet.cpu_model_mismatch"}
 _NTP_RULE_IDS = {"hardware.ntp_not_synchronized"}
 _COREDUMP_RULE_IDS = {"hardware.coredump_not_configured"}
 _VIB_RULE_IDS = {"hardware.community_supported_vib_installed"}
-_STORAGE_HARDWARE_RULE_IDS = _DEVICE_HEALTH_RULE_IDS | _LOG_SIGNAL_RULE_IDS | _SENSOR_RULE_IDS
+_MULTIPATH_RULE_IDS = {
+    "storage.multipath_all_paths_dead",
+    "storage.multipath_reduced_redundancy",
+}
+_STORAGE_HARDWARE_RULE_IDS = (
+    _DEVICE_HEALTH_RULE_IDS | _LOG_SIGNAL_RULE_IDS | _SENSOR_RULE_IDS | _MULTIPATH_RULE_IDS
+)
 
 NOT_ASSESSED = "Not assessed"
 _VCENTER_BUNDLE_REQUIRED = (
@@ -67,7 +73,7 @@ _VCENTER_RULE_PREFIX = "vcenter."
 # backward compatibility with any static behaviour) and ``scope_items``.
 _HOST_ONLY_SCOPE_ITEMS = (
     "ESXi host status and diagnostic data availability",
-    "Storage device, adapter, and SMART health",
+    "Storage device, adapter, SMART, and multipath path-state health",
     "Hardware sensor status (IPMI)",
     "Storage-related log signals (PDL/APD/ALUA/VOB), scoped to the last 90 days",
     "Server and CPU hardware inventory, including processor compatibility across hosts",
@@ -151,7 +157,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
     if vcenter is None:
         return (
             "ESXi host status and diagnostic data availability",
-            "Storage device, adapter, and SMART health",
+            "Storage device, adapter, SMART, and multipath path-state health",
             "Hardware sensor status (IPMI)",
             "Storage-related log signals (PDL/APD/ALUA/VOB), scoped to the last 90 days",
             "Server and CPU hardware inventory, including processor compatibility "
@@ -167,7 +173,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         )
     items = [
         "ESXi host status and diagnostic data availability",
-        "Storage device, adapter, and SMART health",
+        "Storage device, adapter, SMART, and multipath path-state health",
         "Hardware sensor status (IPMI)",
         "Storage-related log signals (PDL/APD/ALUA/VOB), scoped to the last 90 days",
         "Server and CPU hardware inventory, including processor compatibility across hosts",
@@ -593,7 +599,12 @@ class HardwareStatusGrid:
 def hardware_status_grid(assessment: Assessment) -> HardwareStatusGrid:
     findings = assessment.findings
     disk_status = _status_label(
-        _worst_severity(_by_ids(findings, _DEVICE_HEALTH_RULE_IDS | _LOG_SIGNAL_RULE_IDS))
+        _worst_severity(
+            _by_ids(
+                findings,
+                _DEVICE_HEALTH_RULE_IDS | _LOG_SIGNAL_RULE_IDS | _MULTIPATH_RULE_IDS,
+            )
+        )
     )
     sensor_status = _status_label(_worst_severity(_by_ids(findings, _SENSOR_RULE_IDS)))
 
@@ -762,6 +773,8 @@ _CATEGORY_BY_RULE_ID = {
     "hardware.ntp_not_synchronized": "Other",
     "hardware.coredump_not_configured": "Other",
     "hardware.community_supported_vib_installed": "Other",
+    "storage.multipath_all_paths_dead": "Storage",
+    "storage.multipath_reduced_redundancy": "Storage",
     "coverage.limited_diagnostic_data": "Other",
     "vcenter.core_service_stopped": "vCenter",
     "vcenter.optional_service_stopped": "vCenter",

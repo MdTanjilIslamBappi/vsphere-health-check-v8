@@ -7,6 +7,7 @@ from vhealth.parsers import (
     coredump,
     datastore,
     hardware_inventory,
+    multipath,
     ntp,
     readme,
     sensors,
@@ -205,6 +206,7 @@ def test_parsers_report_warnings_when_evidence_missing(tmp_path):
     assert ntp.parse(empty_dir, host) != []
     assert coredump.parse(empty_dir, host) != []
     assert vib.parse(empty_dir, host) != []
+    assert multipath.parse(empty_dir, host) != []
 
 
 def test_hardware_inventory_parser_extracts_server_and_cpu_model(tmp_path):
@@ -299,3 +301,24 @@ def test_vib_parser_reports_warning_when_file_missing(tmp_path):
     warnings = vib.parse(host_dir, host)
     assert warnings != []
     assert host.vib_data_available is False
+
+
+def test_multipath_parser_aggregates_dead_paths_per_device(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path, multipath_dead_paths=1, multipath_total_paths=2
+    )
+    warnings = multipath.parse(host_dir, host)
+    assert warnings == []
+    assert host.multipath_data_available is True
+    assert len(host.multipath_devices) == 1
+    device = host.multipath_devices[0]
+    assert device.total_paths == 2
+    assert device.dead_paths == 1
+    assert device.device == "naa.6000000000000000000000000000099"
+
+
+def test_multipath_parser_reports_warning_when_file_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = multipath.parse(host_dir, host)
+    assert warnings != []
+    assert host.multipath_data_available is False

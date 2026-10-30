@@ -215,6 +215,23 @@ def test_component_status_rows_flags_attention_for_high_severity_finding():
     assert rows["Overall"].status == "Attention Needed"
 
 
+def test_component_status_rows_counts_multipath_finding_as_storage_hardware():
+    from vhealth.models.findings import Finding, Severity
+
+    host = HostInfo(hostname="h1", bundle_source="h1")
+    finding = Finding(
+        rule_id="storage.multipath_all_paths_dead",
+        title="All multipathing paths to a storage device are dead",
+        severity=Severity.CRITICAL,
+        summary="...",
+        affected_host="h1",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["Storage & Hardware Findings"].status == "Attention Needed"
+    assert rows["Overall"].status == "Attention Needed"
+
+
 def test_cluster_status_row_counts_host_with_only_resolved_cluster_name():
     """A host resolved to a cluster purely via vCenter-side membership data
 

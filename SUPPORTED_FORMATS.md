@@ -57,6 +57,7 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
 | `commands/localcli_--formatterjson-system-ntp-get.txt` | `ntp.py` | NTP enabled/configured-server state and, separately, whether the host's clock is actually synchronized right now |
 | `commands/localcli_system-coredump-file-list.txt` | `coredump.py` | Whether a file-based kernel-coredump target is both active and configured |
 | `commands/localcli_software-vib-list.txt` | `vib.py` | Installed VIB acceptance levels; flags any `CommunitySupported` (unsupported by VMware GSS) VIB |
+| `commands/localcli_storage-nmp-path-list.txt` | `multipath.py` | Per-device multipath path state (active/active unoptimized/dead), aggregated across every path block naming that device |
 
 ## Known gaps (not yet implemented)
 

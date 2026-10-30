@@ -141,6 +141,36 @@ def test_no_community_supported_vib_raises_no_finding(tmp_path):
     assert "hardware.community_supported_vib_installed" not in rule_ids
 
 
+def test_multipath_all_paths_dead_raises_critical_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path, multipath_dead_paths=2, multipath_total_paths=2
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "storage.multipath_all_paths_dead" in rule_ids
+    assert "storage.multipath_reduced_redundancy" not in rule_ids
+
+
+def test_multipath_reduced_redundancy_raises_high_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path, multipath_dead_paths=1, multipath_total_paths=2
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "storage.multipath_reduced_redundancy" in rule_ids
+    assert "storage.multipath_all_paths_dead" not in rule_ids
+
+
+def test_multipath_no_dead_paths_raises_no_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path, multipath_dead_paths=0, multipath_total_paths=2
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "storage.multipath_all_paths_dead" not in rule_ids
+    assert "storage.multipath_reduced_redundancy" not in rule_ids
+
+
 def test_fleet_disabled_rules_are_excluded():
     host_a = HostInfo(hostname="host-a", bundle_source="a", cpu_model="Intel Xeon Gold 6258R")
     host_b = HostInfo(hostname="host-b", bundle_source="b", cpu_model="Intel Xeon Gold 6430")

@@ -11,6 +11,7 @@ from vhealth.parsers import (
     coredump,
     datastore,
     hardware_inventory,
+    multipath,
     ntp,
     readme,
     sensors,
@@ -35,6 +36,7 @@ PARSER_MODULES = [
     ntp,
     coredump,
     vib,
+    multipath,
 ]
 
 PARSER_VERSIONS = {m.__name__.rsplit(".", 1)[-1]: m.VERSION for m in PARSER_MODULES}

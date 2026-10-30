@@ -77,6 +77,21 @@ class HardwareSensor(BaseModel):
     sensor_type: str | None = None
 
 
+class MultipathDevice(BaseModel):
+    """A storage device's aggregate path state (esxcli storage nmp path list).
+
+    ``total_paths``/``dead_paths`` are tallied across every path block that
+    names this device; a device with ``dead_paths == total_paths`` has no
+    surviving path at all, while ``0 < dead_paths < total_paths`` means
+    reduced (not eliminated) redundancy.
+    """
+
+    device: str
+    display_name: str | None = None
+    total_paths: int = 0
+    dead_paths: int = 0
+
+
 COVERAGE_CATEGORIES = (
     "readme",
     "system_version",
@@ -123,6 +138,10 @@ class HostInfo(BaseModel):
     # issues on, so it is tracked by name rather than just a boolean.
     vib_data_available: bool = False
     community_supported_vibs: list[str] = Field(default_factory=list)
+    # Storage multipath state (esxcli storage nmp path list), aggregated
+    # per device from every path block that names it.
+    multipath_data_available: bool = False
+    multipath_devices: list[MultipathDevice] = Field(default_factory=list)
     sensors: list[HardwareSensor] = Field(default_factory=list)
     log_events: list[str] = Field(default_factory=list)
     log_signal_counts: dict[str, int] = Field(default_factory=dict)

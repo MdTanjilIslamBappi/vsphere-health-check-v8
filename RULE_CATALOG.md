@@ -28,6 +28,8 @@ see "Adding a rule" below.
 | `storage.path_dead_detected` | Storage | Dead storage path/device detected in vmkwarning log | High | `log_signal_counts.path_dead`, `log_events` | Same log-retention and 90-day quarterly-scoping caveats as PDL. |
 | `storage.alua_path_connectivity` | Storage | Repeated ALUA path-connectivity errors detected | Medium | `log_signal_counts.alua_no_connection`, `log_events` | Only fires at 3+ occurrences to avoid flagging a single transient blip; the threshold is a heuristic, not a vendor-documented number. Same 90-day quarterly scoping as PDL. |
 | `storage.vob_problem_event` | Storage | VMkernel Observation (VOB) flagged a storage problem event | Medium | `log_signal_counts.vob_storage_problem`, `log_events` | vobd only logs events ESXi itself classified as `esx.problem.*`; it is not a complete list of storage issues. Same 90-day quarterly scoping as PDL. |
+| `storage.multipath_all_paths_dead` | Storage | All multipathing paths to a storage device are dead | Critical | `multipath_devices[].dead_paths`/`total_paths` (from `esxcli storage nmp path list`) | Point-in-time snapshot at capture only; does not confirm which datastore/VM (if any) is backed by the affected device. Sees a dead path even if it predates every retained vmkwarning rotation, unlike the log-derived `storage.path_dead_detected`. |
+| `storage.multipath_reduced_redundancy` | Storage | Storage device has one or more dead multipathing paths | High | `multipath_devices[].dead_paths`/`total_paths` (from `esxcli storage nmp path list`) | Point-in-time snapshot at capture only; same visibility advantage over `storage.path_dead_detected` as above. |
 | `coverage.limited_diagnostic_data` | Other | Limited diagnostic data available in this support bundle | Low (Info if only 1-2 categories missing) | `coverage()` -- derived from `storage_adapters`/`storage_devices`/`smart_data`/`hardware_sensors`/`log_signals`/`hardware_inventory` presence | Reports what is missing, not why; cannot distinguish a reduced/incident-mode vm-support capture from hardware that genuinely has nothing to report (e.g. no local disks). |
 | `fleet.cpu_model_mismatch` (**fleet rule**) | CPU | Multiple CPU models detected across assessed hosts | Medium | `cpu_model` (from `smbiosDump.txt`) on 2+ hosts in the assessment | Compares raw SMBIOS CPU model strings across hosts in this assessment only; has no visibility into actual vCenter cluster membership or EVC configuration, so it cannot tell you whether these hosts share a cluster or whether EVC already mitigates the mismatch. |
 | `hardware.ntp_not_synchronized` | Other | Host clock is not synchronized via NTP | Medium | `ntp_time_synchronized`, `ntp_servers` (from `esxcli system ntp get`) | Point-in-time snapshot from the bundle's capture moment only; a host that synced (or lost sync) before/after capture is not reflected. Does not distinguish "NTP service disabled" from "enabled but server unreachable" -- both surface as `Time Synchronized = false`. |
@@ -98,6 +100,16 @@ confirmed against the same real 10-host EAMSC2 bundle: each host lists
 the non-firing path is real-data-validated. The firing path has not yet
 been observed against real-world data and is covered by a synthetic
 unit test only.
+
+`storage.multipath_all_paths_dead` has fired against real data: the
+same real 10-host EAMSC2 bundle shows device
+`naa.600507688283b1c88000000000000007` ("IBM Fibre Channel Disk") with
+its one and only known path reporting `Group State: dead` on both
+`eamsc2esxi08` and `eamsc2esxi09` -- a genuine, previously-unreported
+storage-access problem this rule correctly caught.
+`storage.multipath_reduced_redundancy` has not yet been observed firing
+(no real bundle seen so far has a device with some, but not all, paths
+dead) and is covered by a synthetic unit test only.
 
 ## Adding a rule
 
