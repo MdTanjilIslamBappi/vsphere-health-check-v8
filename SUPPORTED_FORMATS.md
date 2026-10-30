@@ -63,6 +63,7 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
 | `commands/nicinfo.sh.txt` | `nic_link.py` | Physical NIC link state (Up/Down), cross-referenced against vSwitch/DVS uplink lists |
 | `commands/vmkfstools_-P--v-10-vmfsvolumes*.txt` | `datastore.py` | VMFS datastore name/UUID, backing device IDs, and point-in-time capacity/free-space (deduplicated fleet-wide by `fleet.datastore_usage_warning`/`_critical` in `fleet_rules.py`) |
 | `commands/sqlite3_etcvmwareconfigstorecurrent-store-1-PRAGMAintegrity_check.txt` | `configstore.py` | ESXi's host-configuration database (ConfigStore) SQLite integrity check result (`ok` vs. a corruption description) |
+| `commands/mobility_network_health_check.txt` | `mobility.py` | ESXi's own built-in migration-network (vMotion/Provisioning) health-check verdict and sub-check detail (JSON; a Python traceback instead of JSON on some builds means the tool itself failed to run) |
 
 ## Known gaps (not yet implemented)
 

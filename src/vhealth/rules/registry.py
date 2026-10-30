@@ -9,6 +9,7 @@ from vhealth.rules import (
     coverage_rules,
     fleet_rules,
     log_rules,
+    mobility_rules,
     multipath_rules,
     network_rules,
     ntp_rules,
@@ -20,7 +21,7 @@ from vhealth.rules import (
 )
 from vhealth.rules.base import FleetRule, Rule
 
-RULE_ENGINE_VERSION = "1.12.0"
+RULE_ENGINE_VERSION = "1.13.0"
 
 ALL_RULES: list[Rule] = [
     *storage_rules.RULES,
@@ -34,6 +35,7 @@ ALL_RULES: list[Rule] = [
     *network_rules.RULES,
     *sel_rules.RULES,
     *configstore_rules.RULES,
+    *mobility_rules.RULES,
 ]
 
 ALL_FLEET_RULES: list[FleetRule] = [

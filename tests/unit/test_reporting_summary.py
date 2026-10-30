@@ -29,6 +29,7 @@ def test_component_status_rows_marks_unassessed_vcenter_sections():
     assert rows["VIB Acceptance Level"].status == summary.NOT_ASSESSED
     assert rows["Network (vSwitch/DVS)"].status == summary.NOT_ASSESSED
     assert rows["ConfigStore Integrity"].status == summary.NOT_ASSESSED
+    assert rows["Migration Network Health"].status == summary.NOT_ASSESSED
 
 
 def test_component_status_rows_reports_real_datastore_and_vm_data_when_present():
@@ -219,6 +220,45 @@ def test_component_status_rows_reports_configstore_healthy_when_ok():
     assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
     rows = {row.component: row for row in summary.component_status_rows(assessment)}
     assert rows["ConfigStore Integrity"].status == "Healthy"
+
+
+def test_component_status_rows_reports_mobility_health_check_error():
+    from vhealth.models.host import MobilityNetworkCheck
+
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        mobility_data_available=True,
+        mobility_checks=[MobilityNetworkCheck(net_service="VMOTION", status="ERROR")],
+    )
+    finding = Finding(
+        rule_id="network.mobility_health_check_error",
+        title="VMOTION network health check reported ERROR",
+        severity=Severity.HIGH,
+        summary="...",
+        affected_host="h1",
+        affected_object="VMOTION",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    mobility_row = rows["Migration Network Health"]
+    assert mobility_row.status == "Attention Needed"
+    assert "VMOTION" in mobility_row.remarks
+    assert summary.category_for_rule_id("network.mobility_health_check_error") == "Network"
+
+
+def test_component_status_rows_reports_mobility_healthy_when_no_errors():
+    from vhealth.models.host import MobilityNetworkCheck
+
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        mobility_data_available=True,
+        mobility_checks=[MobilityNetworkCheck(net_service="VMOTION", status="OK")],
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["Migration Network Health"].status == "Healthy"
 
 
 def test_component_status_rows_reports_vswitch_single_uplink():

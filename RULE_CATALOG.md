@@ -46,6 +46,7 @@ see "Adding a rule" below.
 | `fleet.datastore_usage_warning` (**fleet rule**) | Storage | Datastore is running low on free space | Medium | `datastores[].capacity_bytes`/`available_bytes` (from `vmkfstools -P -v 10`) on any host in the assessment | Point-in-time snapshot at capture only; deduplicated by UUID across hosts that share a datastore. Uses vCenter's own default "Datastore usage on disk" alarm's Warning threshold (75% used, Broadcom KB 450627) rather than an invented number. |
 | `fleet.datastore_usage_critical` (**fleet rule**) | Storage | Datastore is critically low on free space | High | `datastores[].capacity_bytes`/`available_bytes` (from `vmkfstools -P -v 10`) on any host in the assessment | Same as above, using vCenter's own default alarm's Critical/Alert threshold (85% used). |
 | `hardware.configstore_integrity_check_failed` | Other | ConfigStore database integrity check did not report 'ok' | Critical | `configstore_integrity_ok` (from `sqlite3 ... PRAGMA integrity_check` against `/etc/vmware/configstore`) | Point-in-time snapshot at capture only; implemented from SQLite's documented integrity_check behaviour, not yet observed firing against real-world data (see below). |
+| `network.mobility_health_check_error` | Network | Migration network health check reported ERROR | High | `mobility_checks[].status` (from ESXi's own `mobility_network_health_check` tool, not something vhealth infers) | Point-in-time snapshot at capture only, from ESXi's own health-check tool; that tool itself fails to run at all on some hosts (a Python traceback instead of JSON), in which case the host is not assessed by this rule. |
 
 ## Validation status
 
@@ -203,6 +204,24 @@ a rule..." rule below -- it is included anyway because ConfigStore
 corruption is a documented real failure mode (Broadcom KB 312114, KB
 438104), not a hypothetical one, and the healthy case is already
 real-data-validated.
+
+`network.mobility_health_check_error` has fired against real data: on
+the real 10-host EAMSC2 bundle, `mobility_network_health_check.txt`
+(ESXi's own built-in migration-network health-check tool,
+`vmware.mobility.mobility_health_checks`) is a Python traceback
+instead of JSON on 8 of the 10 hosts -- the tool itself fails to run
+on those builds/configurations, so they are correctly not assessed by
+this rule at all. On the remaining 2 hosts (`eamsc2esxi18`,
+`eamsc2esxi22`) the tool did run and reported its own overall
+`"ERROR"` status for *both* the VMOTION and PROVISIONING network
+services, with two distinct, independently-confirmable causes: the
+PROVISIONING check reports an explicit `"No valid vmknics"` sub-check
+error (no VMkernel adapter tagged for provisioning traffic on that
+host), while the VMOTION check's individual sub-checks all pass but
+only 1 of the 22 expected cluster-peer destinations listed in
+`checkConnectivityTo` was actually tested for TCP/ping connectivity --
+a genuine, previously-unreported migration-readiness gap on both
+hosts, surfaced directly by VMware's own tooling rather than inferred.
 
 ## Adding a rule
 

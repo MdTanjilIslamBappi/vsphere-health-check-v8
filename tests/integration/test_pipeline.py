@@ -178,6 +178,22 @@ def test_run_assessment_flags_configstore_integrity_check_failure(tmp_path):
     assert "hardware.configstore_integrity_check_failed" in rule_ids
 
 
+def test_run_assessment_flags_mobility_health_check_error(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz",
+        mobility_status="ERROR",
+        mobility_expected_destinations=22,
+        mobility_tested_destinations=1,
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    host = assessment.hosts[0]
+    assert host.mobility_data_available is True
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "network.mobility_health_check_error" in rule_ids
+
+
 def test_run_assessment_on_multi_host_vcenter_zip(tmp_path):
     bundle_path = build_vcenter_zip(
         tmp_path / "vc.zip", hostnames=["esxi-a.example.test", "esxi-b.example.test"]

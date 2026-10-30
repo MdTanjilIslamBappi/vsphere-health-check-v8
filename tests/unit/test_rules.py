@@ -1,6 +1,6 @@
 from synthetic_bundle import build_host_dir
 
-from vhealth.models.host import HostInfo, NetworkSwitch
+from vhealth.models.host import HostInfo, MobilityNetworkCheck, NetworkSwitch
 from vhealth.parsers import PARSER_MODULES
 from vhealth.rules import evaluate_all, evaluate_all_fleet
 
@@ -375,6 +375,51 @@ def test_configstore_integrity_check_ok_raises_no_finding(tmp_path):
     findings = evaluate_all([host])
     rule_ids = {f.rule_id for f in findings}
     assert "hardware.configstore_integrity_check_failed" not in rule_ids
+
+
+def test_mobility_health_check_error_raises_high_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path,
+        mobility_status="ERROR",
+        mobility_expected_destinations=22,
+        mobility_tested_destinations=1,
+    )
+    findings = evaluate_all([host])
+    mob = [f for f in findings if f.rule_id == "network.mobility_health_check_error"]
+    assert len(mob) == 1
+    assert mob[0].severity.value == "high"
+    assert "1 of 22" in mob[0].evidence[1]
+
+
+def test_mobility_health_check_ok_raises_no_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path, mobility_status="OK", mobility_expected_destinations=5,
+        mobility_tested_destinations=5,
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "network.mobility_health_check_error" not in rule_ids
+
+
+def test_mobility_health_check_surfaces_specific_sub_check_error():
+    """The PROVISIONING netService's distinctive "No valid vmknics" error
+
+    (a host with no VMkernel adapter tagged for provisioning traffic) must
+    be surfaced verbatim in the finding's evidence.
+    """
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        mobility_data_available=True,
+        mobility_checks=[
+            MobilityNetworkCheck(
+                net_service="PROVISIONING", status="ERROR", errors=["No valid vmknics"]
+            )
+        ],
+    )
+    findings = evaluate_all([host])
+    mob = next(f for f in findings if f.rule_id == "network.mobility_health_check_error")
+    assert "error: No valid vmknics" in mob.evidence
 
 
 def test_fleet_disabled_rules_are_excluded():

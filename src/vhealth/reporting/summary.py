@@ -46,6 +46,7 @@ _NTP_RULE_IDS = {"hardware.ntp_not_synchronized"}
 _COREDUMP_RULE_IDS = {"hardware.coredump_not_configured"}
 _VIB_RULE_IDS = {"hardware.community_supported_vib_installed"}
 _CONFIGSTORE_RULE_IDS = {"hardware.configstore_integrity_check_failed"}
+_MOBILITY_RULE_IDS = {"network.mobility_health_check_error"}
 _MULTIPATH_RULE_IDS = {
     "storage.multipath_all_paths_dead",
     "storage.multipath_reduced_redundancy",
@@ -189,6 +190,14 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         else "ConfigStore database integrity -- not assessed; no sqlite3 "
         "PRAGMA integrity_check data found in this bundle"
     )
+    has_mobility_data = any(h.mobility_data_available for h in assessment.hosts)
+    mobility_item = (
+        "Migration-network (vMotion/Provisioning) health, per ESXi's own built-in "
+        "check (mobility_network_health_check)"
+        if has_mobility_data
+        else "Migration-network (vMotion/Provisioning) health -- not assessed; no "
+        "mobility_network_health_check data found in this bundle"
+    )
     if vcenter is None:
         return (
             "ESXi host status and diagnostic data availability",
@@ -203,6 +212,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
             vib_item,
             configstore_item,
             network_item,
+            mobility_item,
             evc_item,
             datastore_item,
             vm_item,
@@ -223,6 +233,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         vib_item,
         configstore_item,
         network_item,
+        mobility_item,
         evc_item,
         datastore_item,
         vm_item,
@@ -501,6 +512,37 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
             "PRAGMA integrity_check data found in this bundle."
         )
     rows.append(ComponentStatus("ConfigStore Integrity", configstore_status, configstore_remark))
+
+    hosts_with_mobility_data = [h for h in hosts if h.mobility_data_available]
+    if hosts_with_mobility_data:
+        mobility_findings = _by_ids(findings, _MOBILITY_RULE_IDS)
+        mobility_status = (
+            _status_label(_worst_severity(mobility_findings)) if mobility_findings else "Healthy"
+        )
+        if mobility_findings:
+            affected_services = sorted(
+                {f.affected_object for f in mobility_findings if f.affected_object}
+            )
+            mobility_remark = (
+                f"{len(mobility_findings)} migration-network health check ERROR(s) "
+                f"reported by ESXi's own tool, across {len(hosts_with_mobility_data)} "
+                f"of {total} host(s) with data: {', '.join(affected_services)}."
+            )
+        else:
+            mobility_remark = (
+                f"All {len(hosts_with_mobility_data)} of {total} host(s) with migration-"
+                "network health check data report no ERROR status."
+            )
+    else:
+        mobility_status = NOT_ASSESSED
+        mobility_remark = (
+            "Migration-network (vMotion/Provisioning) health check -- not assessed; "
+            "no mobility_network_health_check data found in this bundle (the tool "
+            "itself fails to run on some ESXi builds/configurations)."
+        )
+    rows.append(
+        ComponentStatus("Migration Network Health", mobility_status, mobility_remark)
+    )
 
     hosts_with_switch_data = [h for h in hosts if h.network_switch_data_available]
     if hosts_with_switch_data:
@@ -921,6 +963,7 @@ _CATEGORY_BY_RULE_ID = {
     "network.vswitch_single_uplink": "Network",
     "network.vswitch_uplink_link_down": "Network",
     "network.vswitch_all_uplinks_down": "Network",
+    "network.mobility_health_check_error": "Network",
     "fleet.vswitch_mtu_mismatch": "Network",
     "fleet.datastore_usage_warning": "Storage",
     "fleet.datastore_usage_critical": "Storage",

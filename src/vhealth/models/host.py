@@ -121,6 +121,24 @@ class NetworkAdapter(BaseModel):
     link_up: bool
 
 
+class MobilityNetworkCheck(BaseModel):
+    """One netService's result from ESXi's own built-in migration-network
+
+    health check (``vmware.mobility.mobility_health_checks``, captured as
+    ``mobility_network_health_check.txt``). ``status`` is the tool's own
+    verdict string (observed value: ``"ERROR"``); ``expected_destinations``/
+    ``tested_destinations`` track how many of the service's known peer
+    hosts were actually probed for connectivity, which is not always all
+    of them even when the sub-checks that did run all passed.
+    """
+
+    net_service: str
+    status: str
+    expected_destinations: int = 0
+    tested_destinations: int = 0
+    errors: list[str] = Field(default_factory=list)
+
+
 COVERAGE_CATEGORIES = (
     "readme",
     "system_version",
@@ -172,6 +190,10 @@ class HostInfo(BaseModel):
     # anything else is one or more corruption-description lines.
     configstore_data_available: bool = False
     configstore_integrity_ok: bool | None = None
+    # ESXi's own built-in migration-network (vMotion/Provisioning) health
+    # check verdict -- a first-party result, not something vhealth infers.
+    mobility_data_available: bool = False
+    mobility_checks: list[MobilityNetworkCheck] = Field(default_factory=list)
     # Storage multipath state (esxcli storage nmp path list), aggregated
     # per device from every path block that names it.
     multipath_data_available: bool = False

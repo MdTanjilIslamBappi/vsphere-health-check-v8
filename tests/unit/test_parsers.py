@@ -9,6 +9,7 @@ from vhealth.parsers import (
     datastore,
     hardware_inventory,
     ipmi_sel,
+    mobility,
     multipath,
     nic_link,
     ntp,
@@ -451,3 +452,39 @@ def test_configstore_parser_reports_warning_when_file_missing(tmp_path):
     warnings = configstore.parse(host_dir, host)
     assert warnings != []
     assert host.configstore_data_available is False
+
+
+def test_mobility_parser_extracts_status_and_destination_counts(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path,
+        mobility_status="ERROR",
+        mobility_expected_destinations=22,
+        mobility_tested_destinations=1,
+    )
+    warnings = mobility.parse(host_dir, host)
+    assert warnings == []
+    assert host.mobility_data_available is True
+    assert len(host.mobility_checks) == 1
+    check = host.mobility_checks[0]
+    assert check.net_service == "VMOTION"
+    assert check.status == "ERROR"
+    assert check.expected_destinations == 22
+    assert check.tested_destinations == 1
+
+
+def test_mobility_parser_reports_warning_on_traceback_instead_of_json(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    (host_dir / "commands" / "mobility_network_health_check.txt").write_text(
+        "Traceback (most recent call last):\n  ...\nException: Not supported\n",
+        encoding="utf-8",
+    )
+    warnings = mobility.parse(host_dir, host)
+    assert warnings != []
+    assert host.mobility_data_available is False
+
+
+def test_mobility_parser_reports_warning_when_file_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = mobility.parse(host_dir, host)
+    assert warnings != []
+    assert host.mobility_data_available is False

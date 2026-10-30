@@ -271,6 +271,25 @@ and the "Known limitations" section of [README.md](README.md)).
   real-data-confirmed; the firing (corrupt) path is covered by a
   synthetic unit test only, same convention as `coredump_not_configured`
   and `community_supported_vib_installed` before it.
+- `network.mobility_health_check_error` rule and `mobility.py` parser:
+  reads ESXi's own built-in migration-network health-check tool
+  (`vmware.mobility.mobility_health_checks`, captured as
+  `mobility_network_health_check.txt`) and flags any netService
+  (vMotion, Provisioning) whose own reported status is `"ERROR"` --
+  unlike every other rule in this catalogue, the verdict here is
+  ESXi's own, not something vhealth infers from raw state. New
+  "Migration Network Health" component row and scope item, folded into
+  the existing "Network" category. **Fired against real data on first
+  try**: on the real 10-host EAMSC2 bundle, the tool itself is a Python
+  traceback instead of JSON on 8 of 10 hosts (a build/configuration
+  incompatibility, correctly treated as missing data rather than a
+  finding), but on the 2 hosts where it did run (`eamsc2esxi18`,
+  `eamsc2esxi22`) both VMOTION and PROVISIONING report ERROR with two
+  distinct, independently-confirmable causes: PROVISIONING's explicit
+  `"No valid vmknics"` sub-check error, and VMOTION testing only 1 of
+  22 expected cluster-peer destinations for connectivity despite every
+  individual sub-check passing -- a genuine, previously-unreported
+  migration-readiness gap surfaced directly by VMware's own tooling.
 
 ### Fixed
 

@@ -101,6 +101,9 @@ def build_host_dir(
     ipmi_sel_when: str = "2026-01-15T10:05:00",
     nic_link_status: dict[str, bool] | None = None,
     configstore_integrity_ok: bool | None = None,
+    mobility_status: str | None = None,
+    mobility_expected_destinations: int = 5,
+    mobility_tested_destinations: int = 1,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -164,6 +167,14 @@ def build_host_dir(
     ``configstore_integrity_ok``, if given (True or False), adds a
     ``sqlite3 ... PRAGMA integrity_check`` dump reporting ``ok`` or a
     synthetic corruption line; left as ``None``, no ConfigStore data is
+    written at all.
+
+    ``mobility_status``, if given (e.g. ``"ERROR"`` or ``"OK"``), adds a
+    ``mobility_network_health_check`` JSON dump with one ``VMOTION``
+    netService entry reporting that status, ``mobility_expected_destinations``
+    peer hosts listed in ``checkConnectivityTo``, and
+    ``mobility_tested_destinations`` of them actually present in the
+    ``TcpConnectivity result``; left as ``None``, no mobility data is
     written at all.
     """
     bundle_dir = root / f"esx-{hostname}-2026-01-15"
@@ -457,6 +468,34 @@ def build_host_dir(
             / "commands"
             / "sqlite3_etcvmwareconfigstorecurrent-store-1-PRAGMAintegrity_check.txt"
         ).write_text(text, encoding="utf-8")
+
+    if mobility_status is not None:
+        destinations = [
+            {
+                "dstHostName": f"synthetic-peer-{i}.example.test",
+                "dstVmkName": "vmk1",
+                "dstIpV4": f"192.168.100.{20 + i}",
+                "dstIpV6": "",
+            }
+            for i in range(mobility_expected_destinations)
+        ]
+        tested = [
+            {"dstIp": d["dstIpV4"], "error": [], "warning": []}
+            for d in destinations[:mobility_tested_destinations]
+        ]
+        mobility_dump = [
+            {
+                "netService": "VMOTION",
+                "checkConnectivityTo": destinations,
+                "TcpConnectivity result": {
+                    "name": "TcpConnectivity", "results": tested, "status": 0,
+                },
+                "VMOTION network health check status": mobility_status,
+            }
+        ]
+        (bundle_dir / "commands" / "mobility_network_health_check.txt").write_text(
+            json.dumps(mobility_dump), encoding="utf-8"
+        )
 
     return bundle_dir
 
