@@ -197,8 +197,11 @@ def _parse_vpxd_clusters(root, vcenter: VCenterInfo) -> list[str]:
     log_dir = root / "var" / "log" / "vmware" / "vpxd"
     if not log_dir.is_dir():
         return ["vpxd logs not present; vCenter cluster inventory unavailable"]
-    logs = sorted(p for p in log_dir.glob(_VPXD_LOG_GLOB.rsplit("/", 1)[-1])
-                  if p.is_file() and p.stat().st_size > 0 and re.fullmatch(r"vpxd-\d+\.log", p.name))
+    logs = sorted(
+        p
+        for p in log_dir.glob(_VPXD_LOG_GLOB.rsplit("/", 1)[-1])
+        if p.is_file() and p.stat().st_size > 0 and re.fullmatch(r"vpxd-\d+\.log", p.name)
+    )
     if not logs:
         return ["no current (uncompressed) vpxd log found; vCenter cluster inventory unavailable"]
     total = sum(p.stat().st_size for p in logs)

@@ -170,7 +170,7 @@ _VCENTER_EVIDENCE_RELATIVE_PATHS = [
 
 
 def _build_vcenter_evidence_manifest(
-    ref: "VCenterBundleRef", vcenter: VCenterInfo | None
+    ref: VCenterBundleRef, vcenter: VCenterInfo | None
 ) -> list[EvidenceManifestEntry]:
     if vcenter is None:
         return []
@@ -190,7 +190,7 @@ def _build_vcenter_evidence_manifest(
 
 def _ingest_vcenter_bundle(
     extraction_dir: Path, processing_warnings: list[ProcessingWarning]
-) -> tuple[VCenterInfo | None, "VCenterBundleRef | None"]:
+) -> tuple[VCenterInfo | None, VCenterBundleRef | None]:
     """Parse the (optional) vCenter appliance bundle member of the archive."""
     refs = find_vcenter_bundles(extraction_dir)
     if not refs:

@@ -29,7 +29,9 @@ def build_host_infos(bundle_refs: list[HostBundleRef]) -> list[HostInfo]:
 
 def build_vcenter_info(ref: VCenterBundleRef) -> VCenterInfo:
     """Parse one vCenter ``vc-support`` bundle directory into a VCenterInfo."""
-    vcenter = VCenterInfo(hostname=ref.hostname_hint or "vCenter Server", bundle_source=ref.root.name)
+    vcenter = VCenterInfo(
+        hostname=ref.hostname_hint or "vCenter Server", bundle_source=ref.root.name
+    )
     try:
         warnings = vcenter_parser.parse(ref.root, vcenter)
     except Exception as exc:  # noqa: BLE001 - a single parser must not abort the run
