@@ -194,6 +194,10 @@ class HostInfo(BaseModel):
     # check verdict -- a first-party result, not something vhealth infers.
     mobility_data_available: bool = False
     mobility_checks: list[MobilityNetworkCheck] = Field(default_factory=list)
+    # Pending (staged-but-not-yet-rebooted) image profile (esxcli software
+    # profile get --rebooting-image). None means no reboot is pending.
+    pending_reboot_data_available: bool = False
+    pending_reboot_image_name: str | None = None
     # Storage multipath state (esxcli storage nmp path list), aggregated
     # per device from every path block that names it.
     multipath_data_available: bool = False
@@ -210,6 +214,11 @@ class HostInfo(BaseModel):
     log_signal_counts: dict[str, int] = Field(default_factory=dict)
     log_signal_counts_excluded: dict[str, int] = Field(default_factory=dict)
     log_data_available: bool = False
+    # How many weeks of log/event history (vmkwarning/vobd, IPMI SEL) count
+    # toward an active finding -- set once per assessment from
+    # AssessmentConfig.log_window_weeks before parsing begins (see
+    # correlation/build.py); 1-26 inclusive, default 13 (~ a quarter).
+    log_window_weeks: int = 13
     server_manufacturer: str | None = None
     server_model: str | None = None
     cpu_model: str | None = None

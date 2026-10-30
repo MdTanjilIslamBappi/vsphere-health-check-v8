@@ -2,8 +2,8 @@
 
 See ``parsers/ipmi_sel.py`` for why this is a separate source from
 ``hardware.ipmi_sensor_asserted`` (current sensor state only) and from
-``log_rules.py`` (vmkwarning/vobd storage signals): same quarterly-scope
-convention, independent file, independent per-signal rule IDs. Only one
+``log_rules.py`` (vmkwarning/vobd storage signals): same configurable-
+window convention, independent file, independent per-signal rule IDs. Only one
 ``Rule`` is registered for the whole module (mirroring ``log_rules.py``'s
 own ``storage.log_signals`` umbrella) because ``_sel_signal_findings``
 itself produces every signal's findings in one pass -- registering a
@@ -66,27 +66,29 @@ def _sel_signal_findings(host: HostInfo) -> list[Finding]:
             continue
         examples = [e for e in host.log_events if e.startswith(f"[{signal_name}]")]
         excluded = host.log_signal_counts_excluded.get(signal_name, 0)
+        window_weeks = host.log_window_weeks
         findings.append(
             Finding(
                 rule_id=rule_id,
                 title=title,
                 severity=severity,
                 summary=(
-                    f"{count} matching IPMI SEL record(s) found in the last 90 days "
-                    "(this quarter)."
+                    f"{count} matching IPMI SEL record(s) found in the last "
+                    f"{window_weeks} week(s) ({window_weeks * 7} days)."
                 ),
                 evidence=examples,
                 affected_host=host.hostname,
                 remediation=where_to_check,
                 limitations=(
-                    f"{note} Scoped to this quarter (the last 90 days of the bundle's "
-                    "own capture date); a later Deassert/clearing record for the same "
-                    "condition is not distinguished from this -- it only reports that "
-                    "the condition occurred during the window, not whether it is still "
-                    "active as of capture time."
+                    f"{note} Scoped to the last {window_weeks} week(s) "
+                    f"({window_weeks * 7} days) of the bundle's own capture date (the "
+                    "configured log-signal lookback window); a later Deassert/clearing "
+                    "record for the same condition is not distinguished from this -- it "
+                    "only reports that the condition occurred during the window, not "
+                    "whether it is still active as of capture time."
                     + (
                         f" {excluded} additional older occurrence(s) were also found in "
-                        "the bundle but fall outside this quarter's window."
+                        "the bundle but fall outside this window."
                         if excluded
                         else ""
                     )

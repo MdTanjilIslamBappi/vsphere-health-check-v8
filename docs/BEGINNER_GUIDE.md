@@ -172,6 +172,20 @@ once the report is ready:
 vhealth assess path\to\your-bundle.zip
 ```
 
+**Changing how far back log-based findings look:** storage-log
+(PDL/APD/ALUA/VOB) and IPMI hardware-event-history findings only count
+an event if it happened within a lookback window of the bundle's own
+capture date -- 13 weeks (about a quarter) by default. Pass `--weeks`
+with any whole number from 1 to 26 to change it:
+
+```bash
+vhealth assess path\to\your-bundle.zip .\out --weeks 4
+```
+
+An older event is never discarded -- it is just excluded from driving
+a finding, and the report says how many older occurrences exist outside
+the window.
+
 If your bundle is a vCenter-style `.zip` containing several ESXi hosts
 (e.g. one export covering a whole cluster or site), this still produces
 **one** combined `report.html`/`report.docx` covering every host found

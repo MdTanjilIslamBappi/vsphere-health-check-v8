@@ -290,6 +290,38 @@ and the "Known limitations" section of [README.md](README.md)).
   22 expected cluster-peer destinations for connectivity despite every
   individual sub-check passing -- a genuine, previously-unreported
   migration-readiness gap surfaced directly by VMware's own tooling.
+- `hardware.pending_reboot_image` rule and `pending_reboot.py` parser:
+  reads `esxcli software profile get --rebooting-image` and flags a
+  host that has an image profile staged (patches applied) but was
+  never rebooted to actually bring it into effect -- a common,
+  easily-missed gap where the active profile alone makes a host look
+  fully patched. New "Pending Reboot (Image Profile)" component row
+  and scope item, folded into the existing "Other" category. Validated
+  against the real 10-host EAMSC2 bundle: every host reports the
+  literal `No pending image profile available.`, so the healthy
+  (non-firing) path is real-data-confirmed; the firing path is covered
+  by a synthetic unit test only, stated explicitly in RULE_CATALOG.md.
+- **Configurable log-event lookback window.** Storage-log
+  (PDL/APD/ALUA/VOB) and IPMI SEL hardware-event-history findings used
+  to count an event only within a fixed 90-day window of the bundle's
+  capture date. That window is now configurable from 1 to 26 weeks
+  (default 13, ~91 days -- the closest whole-week approximation of the
+  old default, so behaviour is unchanged unless a reader opts in to a
+  different value): `vhealth assess --weeks N` for a single run, or
+  the `assessment.log_window_weeks` key in a TOML config file for a
+  standing default. Threaded through as `HostInfo.log_window_weeks`
+  (set once per assessment before parsing, from
+  `AssessmentConfig.log_window_weeks`) rather than a per-module
+  constant, so `vmk_log.py` and `ipmi_sel.py` share one source of
+  truth. The chosen window is always stated in the report's own text
+  (Scope of Health Check, Executive Summary, and each affected
+  finding's summary/limitations) instead of a hardcoded "90 days"/
+  "this quarter", so a reader never has to guess what period a given
+  finding was scoped to. Out-of-range values (TOML or `--weeks`) are
+  rejected with a clear error rather than silently clamped. Verified
+  against the real 10-host EAMSC2 bundle: re-running the full
+  assessment at the new 13-week/91-day default reproduces the exact
+  same 63 findings as the previous fixed-90-day behaviour.
 
 ### Fixed
 

@@ -23,11 +23,11 @@ see "Adding a rule" below.
 | `storage.smart_reallocated_sectors` | Storage | Local disk has reallocated sectors | Medium | `storage_devices[].smart_raw` | A small, stable count on an older drive is not urgent by itself; this rule does not track trend over time (single snapshot only). |
 | `storage.device_not_on` | Storage | Storage device is not in the `on` state | High | `storage_devices[].status` | A device intentionally taken offline for planned maintenance also matches; cannot distinguish planned from unplanned. |
 | `hardware.ipmi_sensor_asserted` | Hardware / SEL | IPMI hardware sensor is in an asserted (alarm) state | High | `sensors[].status` | Only discrete asserted/deasserted IPMI sensors are evaluated; analog (threshold-crossing) sensors are not evaluated in v1. |
-| `storage.pdl_detected` | Storage | Permanent Device Loss (PDL) detected in vmkwarning log | Critical | `log_signal_counts.pdl_error`, `log_events` | Scoped to the last 90 days of the bundle's own capture date (this is a quarterly assessment); limited to the vmkwarning rotations retained in the bundle at capture time; older events are tallied in `log_signal_counts_excluded` but do not drive this finding. |
-| `storage.apd_detected` | Storage | All-Paths-Down (APD) event detected in vmkwarning log | Critical | `log_signal_counts.apd_event`, `log_events` | Pattern is based on documented VMware KB wording; not yet confirmed against a real APD event in test data (see below). Same 90-day quarterly scoping as `pdl_detected`. |
-| `storage.path_dead_detected` | Storage | Dead storage path/device detected in vmkwarning log | High | `log_signal_counts.path_dead`, `log_events` | Same log-retention and 90-day quarterly-scoping caveats as PDL. |
-| `storage.alua_path_connectivity` | Storage | Repeated ALUA path-connectivity errors detected | Medium | `log_signal_counts.alua_no_connection`, `log_events` | Only fires at 3+ occurrences to avoid flagging a single transient blip; the threshold is a heuristic, not a vendor-documented number. Same 90-day quarterly scoping as PDL. |
-| `storage.vob_problem_event` | Storage | VMkernel Observation (VOB) flagged a storage problem event | Medium | `log_signal_counts.vob_storage_problem`, `log_events` | vobd only logs events ESXi itself classified as `esx.problem.*`; it is not a complete list of storage issues. Same 90-day quarterly scoping as PDL. |
+| `storage.pdl_detected` | Storage | Permanent Device Loss (PDL) detected in vmkwarning log | Critical | `log_signal_counts.pdl_error`, `log_events` | Scoped to a configurable lookback window (1-26 weeks, default 13 / 91 days) of the bundle's own capture date; limited to the vmkwarning rotations retained in the bundle at capture time; older events are tallied in `log_signal_counts_excluded` but do not drive this finding. |
+| `storage.apd_detected` | Storage | All-Paths-Down (APD) event detected in vmkwarning log | Critical | `log_signal_counts.apd_event`, `log_events` | Pattern is based on documented VMware KB wording; not yet confirmed against a real APD event in test data (see below). Same configurable log-window scoping as `pdl_detected`. |
+| `storage.path_dead_detected` | Storage | Dead storage path/device detected in vmkwarning log | High | `log_signal_counts.path_dead`, `log_events` | Same log-retention and configurable-log-window-scoping caveats as PDL. |
+| `storage.alua_path_connectivity` | Storage | Repeated ALUA path-connectivity errors detected | Medium | `log_signal_counts.alua_no_connection`, `log_events` | Only fires at 3+ occurrences to avoid flagging a single transient blip; the threshold is a heuristic, not a vendor-documented number. Same configurable log-window scoping as PDL. |
+| `storage.vob_problem_event` | Storage | VMkernel Observation (VOB) flagged a storage problem event | Medium | `log_signal_counts.vob_storage_problem`, `log_events` | vobd only logs events ESXi itself classified as `esx.problem.*`; it is not a complete list of storage issues. Same configurable log-window scoping as PDL. |
 | `storage.multipath_all_paths_dead` | Storage | All multipathing paths to a storage device are dead | Critical | `multipath_devices[].dead_paths`/`total_paths` (from `esxcli storage nmp path list`) | Point-in-time snapshot at capture only; does not confirm which datastore/VM (if any) is backed by the affected device. Sees a dead path even if it predates every retained vmkwarning rotation, unlike the log-derived `storage.path_dead_detected`. |
 | `storage.multipath_reduced_redundancy` | Storage | Storage device has one or more dead multipathing paths | High | `multipath_devices[].dead_paths`/`total_paths` (from `esxcli storage nmp path list`) | Point-in-time snapshot at capture only; same visibility advantage over `storage.path_dead_detected` as above. |
 | `coverage.limited_diagnostic_data` | Other | Limited diagnostic data available in this support bundle | Low (Info if only 1-2 categories missing) | `coverage()` -- derived from `storage_adapters`/`storage_devices`/`smart_data`/`hardware_sensors`/`log_signals`/`hardware_inventory` presence | Reports what is missing, not why; cannot distinguish a reduced/incident-mode vm-support capture from hardware that genuinely has nothing to report (e.g. no local disks). |
@@ -37,16 +37,17 @@ see "Adding a rule" below.
 | `hardware.community_supported_vib_installed` | Other | Host has a CommunitySupported (unsupported) VIB installed | Medium | `community_supported_vibs` (from `esxcli software vib list`) | Only reports the acceptance level ESXi itself records; cannot see any separately-granted VMware GSS exception for a specific VIB in this environment. |
 | `network.vswitch_single_uplink` | Network | Network switch has only one uplink (no NIC redundancy) | Medium | `network_switches[].uplinks` (from `esxcfg-vswitch -l`) | Only counts the reported uplink NIC list; cannot see whether those NICs are actually independent upstream (e.g. the same top-of-rack switch). Excludes the virtual `vusb*` uplink used by the BMC/iDRAC out-of-band management vSwitch, which has no physical redundancy to have by design. |
 | `fleet.vswitch_mtu_mismatch` (**fleet rule**) | Network | Inconsistent MTU for the same vSwitch/DVS across hosts | Medium | `network_switches[].mtu` (from `esxcfg-vswitch -l`) on 2+ hosts in the assessment | Compares switches by exact name match across this assessment's hosts only; a standard vSwitch name reused per-host with an intentionally different MTU would also match, and it has no visibility into actual vCenter cluster membership. |
-| `hardware.sel_ecc_uncorrectable` | Hardware / SEL | Uncorrectable memory (ECC) error recorded in the IPMI event log | Critical | `log_signal_counts.sel_ecc_uncorrectable`, `log_events` (from `esxcli hardware ipmi sel list`) | Same 90-day quarterly scoping as PDL. Only `Assert +` SEL records are considered; a later `Deassert` for the same condition is not distinguished, so this reports that the condition occurred, not whether it is still active. |
-| `hardware.sel_drive_predictive_failure` | Hardware / SEL | Drive predictive-failure event recorded in the IPMI event log | High | `log_signal_counts.sel_drive_predictive_failure`, `log_events` (from `esxcli hardware ipmi sel list`) | Same 90-day quarterly scoping and Assert-only caveat as above. This is the storage backplane/HBA's own predictive-failure signal, independent of ESXi's SMART polling (`storage.smart_health_not_ok`). |
-| `hardware.sel_psu_failure` | Hardware / SEL | Power supply failure event recorded in the IPMI event log | High | `log_signal_counts.sel_psu_failure`, `log_events` (from `esxcli hardware ipmi sel list`) | Same 90-day quarterly scoping and Assert-only caveat as above. Only the explicit "Failure status" message is matched; the more ambiguous "AC lost"/"Redundancy Lost" SEL message types are intentionally not tracked to avoid flagging routine PDU/maintenance power blips. |
-| `hardware.sel_temperature_critical` | Hardware / SEL | Critical temperature threshold event recorded in the IPMI event log | High | `log_signal_counts.sel_temperature_critical`, `log_events` (from `esxcli hardware ipmi sel list`) | Same 90-day quarterly scoping and Assert-only caveat as above. Only the "Upper Critical" threshold message is matched; the earlier "Upper Non-critical" warning message is intentionally not tracked. |
+| `hardware.sel_ecc_uncorrectable` | Hardware / SEL | Uncorrectable memory (ECC) error recorded in the IPMI event log | Critical | `log_signal_counts.sel_ecc_uncorrectable`, `log_events` (from `esxcli hardware ipmi sel list`) | Same configurable log-window scoping as PDL. Only `Assert +` SEL records are considered; a later `Deassert` for the same condition is not distinguished, so this reports that the condition occurred, not whether it is still active. |
+| `hardware.sel_drive_predictive_failure` | Hardware / SEL | Drive predictive-failure event recorded in the IPMI event log | High | `log_signal_counts.sel_drive_predictive_failure`, `log_events` (from `esxcli hardware ipmi sel list`) | Same configurable log-window scoping and Assert-only caveat as above. This is the storage backplane/HBA's own predictive-failure signal, independent of ESXi's SMART polling (`storage.smart_health_not_ok`). |
+| `hardware.sel_psu_failure` | Hardware / SEL | Power supply failure event recorded in the IPMI event log | High | `log_signal_counts.sel_psu_failure`, `log_events` (from `esxcli hardware ipmi sel list`) | Same configurable log-window scoping and Assert-only caveat as above. Only the explicit "Failure status" message is matched; the more ambiguous "AC lost"/"Redundancy Lost" SEL message types are intentionally not tracked to avoid flagging routine PDU/maintenance power blips. |
+| `hardware.sel_temperature_critical` | Hardware / SEL | Critical temperature threshold event recorded in the IPMI event log | High | `log_signal_counts.sel_temperature_critical`, `log_events` (from `esxcli hardware ipmi sel list`) | Same configurable log-window scoping and Assert-only caveat as above. Only the "Upper Critical" threshold message is matched; the earlier "Upper Non-critical" warning message is intentionally not tracked. |
 | `network.vswitch_uplink_link_down` | Network | Network switch uplink is configured but has no physical link | High | `network_switches[].uplinks`, `nic_adapters[].link_up` (`esxcfg-vswitch -l` cross-referenced against `nicinfo.sh`) | Point-in-time snapshot at capture only; requires both files to be present in the bundle. Only evaluated for a switch with 2+ configured uplinks -- 0 or 1 is `network.vswitch_single_uplink`'s territory instead. |
 | `network.vswitch_all_uplinks_down` | Network | All of a network switch's uplinks have no physical link | Critical | `network_switches[].uplinks`, `nic_adapters[].link_up` (`esxcfg-vswitch -l` cross-referenced against `nicinfo.sh`) | Point-in-time snapshot at capture only. |
 | `fleet.datastore_usage_warning` (**fleet rule**) | Storage | Datastore is running low on free space | Medium | `datastores[].capacity_bytes`/`available_bytes` (from `vmkfstools -P -v 10`) on any host in the assessment | Point-in-time snapshot at capture only; deduplicated by UUID across hosts that share a datastore. Uses vCenter's own default "Datastore usage on disk" alarm's Warning threshold (75% used, Broadcom KB 450627) rather than an invented number. |
 | `fleet.datastore_usage_critical` (**fleet rule**) | Storage | Datastore is critically low on free space | High | `datastores[].capacity_bytes`/`available_bytes` (from `vmkfstools -P -v 10`) on any host in the assessment | Same as above, using vCenter's own default alarm's Critical/Alert threshold (85% used). |
 | `hardware.configstore_integrity_check_failed` | Other | ConfigStore database integrity check did not report 'ok' | Critical | `configstore_integrity_ok` (from `sqlite3 ... PRAGMA integrity_check` against `/etc/vmware/configstore`) | Point-in-time snapshot at capture only; implemented from SQLite's documented integrity_check behaviour, not yet observed firing against real-world data (see below). |
 | `network.mobility_health_check_error` | Network | Migration network health check reported ERROR | High | `mobility_checks[].status` (from ESXi's own `mobility_network_health_check` tool, not something vhealth infers) | Point-in-time snapshot at capture only, from ESXi's own health-check tool; that tool itself fails to run at all on some hosts (a Python traceback instead of JSON), in which case the host is not assessed by this rule. |
+| `hardware.pending_reboot_image` | Other | Host has an image profile staged but not yet applied by a reboot | Medium | `pending_reboot_image_name` (from `esxcli software profile get --rebooting-image`) | Point-in-time snapshot at capture only; cannot tell how long the reboot has been pending or why it was deferred. Not yet observed firing against real-world data (see below). |
 
 ## Validation status
 
@@ -79,14 +80,19 @@ real vCenter-style bundle (Etisalat "HO-Q4" site) genuinely contains 6
 different CPU models across its hosts (Xeon Gold 6258R/6330N/6430/5218,
 Silver 4216/4110), and the rule correctly flagged it.
 
-The 90-day quarterly log-window scoping (`storage.pdl_detected` and the
-other vmkwarning/vobd-derived rules above) was validated against real
-EAMSC2 bundles: `eamsc2esxi03`'s retained `vmkwarning` rotations span
-roughly 2026-08-06 to 2026-10-12 against a 2026-10-27 capture date, all
-within the 90-day window, so no exclusions occurred there; the exclusion
-path itself (an event older than 90 days being tallied in
-`log_signal_counts_excluded` instead of raising a finding) is covered by
-a synthetic unit test rather than observed in this specific real sample.
+The log-window scoping (`storage.pdl_detected` and the other
+vmkwarning/vobd-derived rules above) was validated against real EAMSC2
+bundles at this tool's original fixed 90-day default: `eamsc2esxi03`'s
+retained `vmkwarning` rotations span roughly 2026-08-06 to 2026-10-12
+against a 2026-10-27 capture date, all within that window, so no
+exclusions occurred there; the exclusion path itself (an event older
+than the window being tallied in `log_signal_counts_excluded` instead
+of raising a finding) is covered by a synthetic unit test rather than
+observed in this specific real sample. The window is now configurable
+(`AssessmentConfig.log_window_weeks` / `vhealth assess --weeks`,
+1-26 weeks) rather than a fixed 90 days; the default is 13 weeks
+(91 days), the closest whole-week approximation of that original value,
+so this validation still applies unchanged at the default.
 
 `hardware.ntp_not_synchronized` was validated against a real 10-host
 EAMSC2 bundle: `localcli system ntp get` on `eamsc2esxi02` genuinely
@@ -145,7 +151,7 @@ different source from the current-state-only `hardware.ipmi_sensor_asserted`)
 were validated against the same real 10-host EAMSC2 bundle.
 `hardware.sel_drive_predictive_failure` has fired against real data:
 host `eamsc2esxi17`'s SEL shows `Assert + Drive Slot Predictive Failure`
-on 2026-08-01, within the 90-day window of the bundle's 2026-10-26
+on 2026-08-01, within the (now 91-day-default) window of the bundle's 2026-10-26
 capture date (a later `Deassert + Drive Slot Predictive Failure` and
 `Deassert + Drive Slot Drive Present` on 2026-09-19 suggest the drive
 was already pulled/replaced by capture time, but this rule does not
@@ -222,6 +228,14 @@ only 1 of the 22 expected cluster-peer destinations listed in
 `checkConnectivityTo` was actually tested for TCP/ping connectivity --
 a genuine, previously-unreported migration-readiness gap on both
 hosts, surfaced directly by VMware's own tooling rather than inferred.
+
+`hardware.pending_reboot_image`'s parsing (`esxcli software profile get
+--rebooting-image`) was confirmed against the real 10-host EAMSC2
+bundle: every host reports the literal `No pending image profile
+available.`, so the non-firing (healthy) path is real-data-validated.
+The firing path (a host with patches staged but never rebooted) has
+not yet been observed against real-world data and is covered by a
+synthetic unit test only.
 
 ## Adding a rule
 

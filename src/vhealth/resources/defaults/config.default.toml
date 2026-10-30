@@ -30,3 +30,10 @@ max_compression_ratio = 1000
 # Rule IDs listed here are skipped entirely (e.g. known-noisy in your
 # environment). Leave empty to run every rule in the catalogue.
 disabled_rules = []
+# How many weeks of log/event history (vmkwarning/vobd storage signals,
+# IPMI SEL hardware history) count toward an active finding; older
+# matches are still tallied but do not drive a finding. 1-26 weeks,
+# default 13 (~91 days, the closest whole-week approximation of this
+# tool's original 90-day "quarterly" default). Also settable per run
+# with `vhealth assess --weeks N`, which overrides this value.
+log_window_weeks = 13

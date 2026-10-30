@@ -47,6 +47,7 @@ _COREDUMP_RULE_IDS = {"hardware.coredump_not_configured"}
 _VIB_RULE_IDS = {"hardware.community_supported_vib_installed"}
 _CONFIGSTORE_RULE_IDS = {"hardware.configstore_integrity_check_failed"}
 _MOBILITY_RULE_IDS = {"network.mobility_health_check_error"}
+_PENDING_REBOOT_RULE_IDS = {"hardware.pending_reboot_image"}
 _MULTIPATH_RULE_IDS = {
     "storage.multipath_all_paths_dead",
     "storage.multipath_reduced_redundancy",
@@ -91,7 +92,8 @@ _HOST_ONLY_SCOPE_ITEMS = (
     "ESXi host status and diagnostic data availability",
     "Storage device, adapter, SMART, and multipath path-state health",
     "Hardware sensor status (IPMI)",
-    "Storage-related log signals (PDL/APD/ALUA/VOB), scoped to the last 90 days",
+    "Storage-related log signals (PDL/APD/ALUA/VOB), scoped to a configurable "
+    "lookback window (1-26 weeks, default 13)",
     "Server and CPU hardware inventory, including processor compatibility across hosts",
     "Cluster/compute-resource membership, where host-reported in the bundle",
     f"Cluster EVC mode configuration -- not assessed; {_VCENTER_BUNDLE_REQUIRED}",
@@ -198,12 +200,22 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         else "Migration-network (vMotion/Provisioning) health -- not assessed; no "
         "mobility_network_health_check data found in this bundle"
     )
+    has_pending_reboot_data = any(h.pending_reboot_data_available for h in assessment.hosts)
+    pending_reboot_item = (
+        "Pending-reboot (staged-but-not-applied) image profile (esxcli software "
+        "profile get --rebooting-image)"
+        if has_pending_reboot_data
+        else "Pending-reboot image profile -- not assessed; no esxcli software "
+        "profile get --rebooting-image data found in this bundle"
+    )
+    log_window_label = _log_window_label(assessment)
     if vcenter is None:
         return (
             "ESXi host status and diagnostic data availability",
             "Storage device, adapter, SMART, and multipath path-state health",
             "Hardware sensor status (IPMI)",
-            "Storage-related log signals (PDL/APD/ALUA/VOB), scoped to the last 90 days",
+            "Storage-related log signals (PDL/APD/ALUA/VOB), scoped to the last "
+            f"{log_window_label}",
             "Server and CPU hardware inventory, including processor compatibility "
             "across hosts",
             "Cluster/compute-resource membership, where host-reported in the bundle",
@@ -213,6 +225,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
             configstore_item,
             network_item,
             mobility_item,
+            pending_reboot_item,
             evc_item,
             datastore_item,
             vm_item,
@@ -222,7 +235,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         "ESXi host status and diagnostic data availability",
         "Storage device, adapter, SMART, and multipath path-state health",
         "Hardware sensor status (IPMI)",
-        "Storage-related log signals (PDL/APD/ALUA/VOB), scoped to the last 90 days",
+        f"Storage-related log signals (PDL/APD/ALUA/VOB), scoped to the last {log_window_label}",
         "Server and CPU hardware inventory, including processor compatibility across hosts",
         "vCenter Server appliance status: version, service-control service status and "
         f"appliance filesystem usage (vCenter bundle for {vcenter.hostname})",
@@ -234,12 +247,31 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         configstore_item,
         network_item,
         mobility_item,
+        pending_reboot_item,
         evc_item,
         datastore_item,
         vm_item,
         f"vCenter-level active alarms -- {_VCENTER_DB_NOT_PARSED}",
     ]
     return tuple(items)
+
+
+_DEFAULT_LOG_WINDOW_WEEKS = 13
+
+
+def _log_window_label(assessment: Assessment) -> str:
+    """"N week(s) (M days)" for whichever log-signal lookback window was
+
+    actually used for this assessment's hosts (set once per assessment
+    from ``AssessmentConfig.log_window_weeks`` / ``vhealth assess
+    --weeks`` before parsing began -- uniform across every host in one
+    assessment, so the first host's value is representative). Falls back
+    to this tool's own default when there are no hosts to read it from.
+    """
+    weeks = next(
+        (h.log_window_weeks for h in assessment.hosts), _DEFAULT_LOG_WINDOW_WEEKS
+    )
+    return f"{weeks} week(s) ({weeks * 7} days)"
 
 
 def _worst_severity(findings: list[Finding]) -> Severity | None:
@@ -544,6 +576,38 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
         ComponentStatus("Migration Network Health", mobility_status, mobility_remark)
     )
 
+    hosts_with_pending_reboot_data = [h for h in hosts if h.pending_reboot_data_available]
+    if hosts_with_pending_reboot_data:
+        pending = [h for h in hosts_with_pending_reboot_data if h.pending_reboot_image_name]
+        pending_reboot_findings = _by_ids(findings, _PENDING_REBOOT_RULE_IDS)
+        pending_reboot_status = (
+            _status_label(_worst_severity(pending_reboot_findings))
+            if pending_reboot_findings
+            else "Healthy"
+        )
+        if pending:
+            pending_reboot_remark = (
+                f"{len(pending)} of {len(hosts_with_pending_reboot_data)} host(s) have an "
+                f"image profile staged but not yet applied by a reboot: "
+                f"{', '.join(h.hostname for h in pending)}."
+            )
+        else:
+            pending_reboot_remark = (
+                f"All {len(hosts_with_pending_reboot_data)} of {total} host(s) with "
+                "pending-reboot data have no image profile staged."
+            )
+    else:
+        pending_reboot_status = NOT_ASSESSED
+        pending_reboot_remark = (
+            "Pending-reboot image profile -- not assessed; no esxcli software profile "
+            "get --rebooting-image data found in this bundle."
+        )
+    rows.append(
+        ComponentStatus(
+            "Pending Reboot (Image Profile)", pending_reboot_status, pending_reboot_remark
+        )
+    )
+
     hosts_with_switch_data = [h for h in hosts if h.network_switch_data_available]
     if hosts_with_switch_data:
         network_findings = _by_ids(findings, _NETWORK_RULE_IDS)
@@ -593,9 +657,9 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
         ComponentStatus(
             "Storage & Hardware Findings",
             _status_label(_worst_severity(storage_hw_findings)),
-            f"{len(storage_hw_findings)} finding(s) this quarter."
+            f"{len(storage_hw_findings)} finding(s) in this assessment."
             if storage_hw_findings
-            else "No storage, SMART, sensor, or log findings this quarter.",
+            else "No storage, SMART, sensor, or log findings in this assessment.",
         )
     )
 
@@ -706,7 +770,7 @@ def key_findings_at_a_glance(assessment: Assessment) -> list[str]:
             f"{storage_row.remarks} High/critical-severity items should be reviewed first."
         )
     else:
-        items.append("No critical or high-severity storage/hardware findings this quarter.")
+        items.append("No critical or high-severity storage/hardware findings in this assessment.")
 
     datastores_row = next(r for r in rows if r.component == "Datastores")
     vms_row = next(r for r in rows if r.component == "Virtual Machines")
@@ -775,10 +839,10 @@ def hardware_status_grid(assessment: Assessment) -> HardwareStatusGrid:
 
     urgent = [f for f in findings if f.severity.rank >= Severity.HIGH.rank]
     observations = (
-        "No critical or high-severity findings observed this quarter."
+        "No critical or high-severity findings observed in this assessment."
         if not urgent
-        else f"{len(urgent)} critical/high-severity finding(s) observed this quarter; "
-        "see Recommendation."
+        else f"{len(urgent)} critical/high-severity finding(s) observed in this "
+        "assessment; see Recommendation."
     )
 
     return HardwareStatusGrid(
@@ -884,13 +948,17 @@ def detailed_observations(assessment: Assessment) -> list[str]:
         items.append("No processor-compatibility mismatch detected across assessed hosts.")
 
     storage_hw = _by_ids(findings, _STORAGE_HARDWARE_RULE_IDS)
+    window_label = _log_window_label(assessment)
     if storage_hw:
         items.append(
-            f"{len(storage_hw)} storage/hardware finding(s) were observed within the last "
-            "90 days (this quarter); see Recommendation."
+            f"{len(storage_hw)} storage/hardware finding(s) were observed within the "
+            f"last {window_label} (for log-based signals) or at capture time (for "
+            "device/sensor snapshots); see Recommendation."
         )
     else:
-        items.append("No storage or hardware findings were observed within the last 90 days.")
+        items.append(
+            f"No storage or hardware findings were observed within the last {window_label}."
+        )
 
     ntp_hosts = [h for h in hosts if h.ntp_data_available]
     if ntp_hosts:
@@ -958,6 +1026,7 @@ _CATEGORY_BY_RULE_ID = {
     "hardware.coredump_not_configured": "Other",
     "hardware.community_supported_vib_installed": "Other",
     "hardware.configstore_integrity_check_failed": "Other",
+    "hardware.pending_reboot_image": "Other",
     "storage.multipath_all_paths_dead": "Storage",
     "storage.multipath_reduced_redundancy": "Storage",
     "network.vswitch_single_uplink": "Network",
@@ -1077,11 +1146,12 @@ def executive_summary_text(assessment: Assessment) -> str:
             f"({assessment.vcenter.hostname}) capture, which was reviewed for appliance "
             "service status, disk usage and cluster information."
         )
+    window_label = _log_window_label(assessment)
     return (
         f"This quarterly health check assessment was performed on the customer's VMware "
         f"vSphere environment, covering {hosts} ESXi host(s), to evaluate overall operational "
         f"status and identify any issues affecting stability or availability within the last "
-        f"90 days.{vcenter_bit} {outcome} Recommendations are provided in Section 3.4. A "
+        f"{window_label}.{vcenter_bit} {outcome} Recommendations are provided in Section 3.4. A "
         f"separate detailed findings log accompanies this report; see Section 2 for what "
         f"this assessment could and could not check from the supplied bundle."
     )

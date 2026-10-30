@@ -72,7 +72,7 @@ def run_assessment(input_path: Path, output_dir: Path, config: AssessmentConfig)
 
     vcenter, vcenter_ref = _ingest_vcenter_bundle(extraction_dir, processing_warnings)
 
-    hosts = build_host_infos(bundle_refs)
+    hosts = build_host_infos(bundle_refs, config.log_window_weeks)
     for host in hosts:
         for warning in host.parse_warnings:
             processing_warnings.append(ProcessingWarning(source=host.hostname, message=warning))

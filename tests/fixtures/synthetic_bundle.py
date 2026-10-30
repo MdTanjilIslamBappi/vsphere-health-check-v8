@@ -104,6 +104,8 @@ def build_host_dir(
     mobility_status: str | None = None,
     mobility_expected_destinations: int = 5,
     mobility_tested_destinations: int = 1,
+    pending_reboot: bool | None = None,
+    pending_reboot_image_name: str = "(Updated) Synthetic-ESXi-8.0U3-standard",
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -176,6 +178,12 @@ def build_host_dir(
     ``mobility_tested_destinations`` of them actually present in the
     ``TcpConnectivity result``; left as ``None``, no mobility data is
     written at all.
+
+    ``pending_reboot``, if given (True or False), adds an ``esxcli
+    software profile get --rebooting-image`` dump reporting either the
+    real pending profile name ``pending_reboot_image_name`` (True) or
+    the literal ``No pending image profile available.`` (False); left
+    as ``None``, no pending-reboot data is written at all.
     """
     bundle_dir = root / f"esx-{hostname}-2026-01-15"
     (bundle_dir / "commands").mkdir(parents=True)
@@ -496,6 +504,23 @@ def build_host_dir(
         (bundle_dir / "commands" / "mobility_network_health_check.txt").write_text(
             json.dumps(mobility_dump), encoding="utf-8"
         )
+
+    if pending_reboot is not None:
+        name = pending_reboot_image_name if pending_reboot else "No pending image profile available."
+        rebooting_image_dump = (
+            f"{name}:\n"
+            f"   Name: {name}\n"
+            "   Vendor: N/A\n"
+            "   Creation Time: 2026-01-15T10:00:00\n"
+            "   Modification Time: 2026-01-15T10:00:00\n"
+            "   Stateless Ready: True\n"
+            "   Description: \n"
+        )
+        (
+            bundle_dir
+            / "commands"
+            / "localcli_software-profile-get---rebooting-image.txt"
+        ).write_text(rebooting_image_dump, encoding="utf-8")
 
     return bundle_dir
 

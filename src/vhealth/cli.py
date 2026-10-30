@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import shutil
 import sys
 import tempfile
@@ -8,7 +9,7 @@ from pathlib import Path
 import click
 
 from vhealth import __version__
-from vhealth.config import load_config
+from vhealth.config import MAX_LOG_WINDOW_WEEKS, MIN_LOG_WINDOW_WEEKS, load_config
 from vhealth.discovery import find_host_bundles
 from vhealth.ingestion import extract_bundle
 from vhealth.ingestion.exceptions import VHealthError
@@ -215,6 +216,18 @@ def inspect(input_path: Path) -> None:
     default=False,
     help="Do not delete the extracted bundle contents after assessment.",
 )
+@click.option(
+    "--weeks",
+    "log_window_weeks",
+    type=click.IntRange(MIN_LOG_WINDOW_WEEKS, MAX_LOG_WINDOW_WEEKS),
+    default=None,
+    help=(
+        "How many weeks of log/event history (storage vmkwarning/vobd signals, "
+        f"IPMI SEL hardware history) count toward a finding ({MIN_LOG_WINDOW_WEEKS}-"
+        f"{MAX_LOG_WINDOW_WEEKS}; default from config, normally 13 -- about a "
+        "quarter). Older matches are still tallied but do not drive a finding."
+    ),
+)
 @_authorship_options
 def assess(
     input_arg: Path | None,
@@ -224,6 +237,7 @@ def assess(
     config_path: Path | None,
     formats: str,
     keep_extracted: bool,
+    log_window_weeks: int | None,
     engineer_name: str | None,
     report_author: str | None,
     verifier_name: str | None,
@@ -257,6 +271,8 @@ def assess(
 
     try:
         config = load_config(config_path)
+        if log_window_weeks is not None:
+            config = dataclasses.replace(config, log_window_weeks=log_window_weeks)
         assessment = run_assessment(input_path, output_dir, config)
     except VHealthError as exc:
         click.echo(f"error: {exc}", err=True)

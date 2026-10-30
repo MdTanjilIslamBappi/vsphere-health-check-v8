@@ -8,7 +8,18 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
+from vhealth.ingestion.exceptions import VHealthError
 from vhealth.security.extraction_guard import ExtractionLimits
+
+# How many weeks of log/event history (vmkwarning/vobd, IPMI SEL) count
+# toward an active finding. 13 weeks (~91 days) is the closest whole-week
+# approximation of this tool's original "quarterly" (90-day) default; the
+# 26-week ceiling is this project's own choice, not a VMware-documented
+# limit, to keep the window from growing large enough to resurface very
+# stale events as if they were current.
+DEFAULT_LOG_WINDOW_WEEKS = 13
+MIN_LOG_WINDOW_WEEKS = 1
+MAX_LOG_WINDOW_WEEKS = 26
 
 
 @dataclass(frozen=True)
@@ -30,6 +41,7 @@ class AssessmentConfig:
     report: ReportConfig
     extraction_limits: ExtractionLimits
     disabled_rules: tuple[str, ...]
+    log_window_weeks: int
     raw: dict
 
 
@@ -81,5 +93,21 @@ def load_config(user_config_path: Path | None) -> AssessmentConfig:
             ),
         ),
         disabled_rules=tuple(assessment.get("disabled_rules", [])),
+        log_window_weeks=_validated_log_window_weeks(
+            assessment.get("log_window_weeks", DEFAULT_LOG_WINDOW_WEEKS)
+        ),
         raw=data,
     )
+
+
+def _validated_log_window_weeks(weeks: object) -> int:
+    if not isinstance(weeks, int) or isinstance(weeks, bool):
+        raise VHealthError(
+            f"assessment.log_window_weeks must be a whole number, got {weeks!r}"
+        )
+    if not (MIN_LOG_WINDOW_WEEKS <= weeks <= MAX_LOG_WINDOW_WEEKS):
+        raise VHealthError(
+            f"assessment.log_window_weeks must be between {MIN_LOG_WINDOW_WEEKS} and "
+            f"{MAX_LOG_WINDOW_WEEKS}, got {weeks}"
+        )
+    return weeks

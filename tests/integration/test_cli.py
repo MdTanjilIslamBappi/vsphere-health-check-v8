@@ -99,3 +99,36 @@ def test_report_regenerates_from_saved_assessment(tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert (report_dir / "report.html").is_file()
+
+
+def test_assess_weeks_option_overrides_default_log_window(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz",
+        ipmi_sel_message="Assert + Memory Uncorrectable ECC",
+        ipmi_sel_when="2026-01-05T10:05:00",  # the fixture's captured_on is 2026-01-15
+    )
+
+    narrow_dir = tmp_path / "out-narrow"
+    result = CliRunner().invoke(
+        main,
+        ["assess", str(bundle_path), str(narrow_dir), "--weeks", "1", "--format", "none"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "hardware.sel_ecc_uncorrectable" not in (narrow_dir / "assessment.json").read_text()
+
+    wide_dir = tmp_path / "out-wide"
+    result = CliRunner().invoke(
+        main,
+        ["assess", str(bundle_path), str(wide_dir), "--weeks", "2", "--format", "none"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "hardware.sel_ecc_uncorrectable" in (wide_dir / "assessment.json").read_text()
+
+
+def test_assess_weeks_option_rejects_out_of_range_value(tmp_path):
+    bundle_path = build_tgz(tmp_path / "host.tgz")
+    result = CliRunner().invoke(
+        main, ["assess", str(bundle_path), str(tmp_path / "out"), "--weeks", "27"]
+    )
+    assert result.exit_code != 0
+    assert "27" in result.output

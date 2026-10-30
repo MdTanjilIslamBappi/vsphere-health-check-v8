@@ -422,6 +422,49 @@ def test_mobility_health_check_surfaces_specific_sub_check_error():
     assert "error: No valid vmknics" in mob.evidence
 
 
+def test_pending_reboot_image_raises_medium_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path, pending_reboot=True, pending_reboot_image_name="(Updated) ESXi-8.0U3j-standard"
+    )
+    findings = evaluate_all([host])
+    pending = [f for f in findings if f.rule_id == "hardware.pending_reboot_image"]
+    assert len(pending) == 1
+    assert pending[0].severity.value == "medium"
+    assert "(Updated) ESXi-8.0U3j-standard" in pending[0].summary
+
+
+def test_pending_reboot_no_pending_image_raises_no_finding(tmp_path):
+    host = _assessed_host(tmp_path, pending_reboot=False)
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "hardware.pending_reboot_image" not in rule_ids
+
+
+def test_log_window_weeks_controls_whether_sel_finding_fires(tmp_path):
+    """An event 10 days before capture (within a 2-week window, outside a
+
+    1-week one) must only raise a finding when the configured window is
+    wide enough -- proving the window, not a hardcoded day count, drives
+    the cutoff.
+    """
+    host_dir = build_host_dir(
+        tmp_path,
+        ipmi_sel_message="Assert + Memory Uncorrectable ECC",
+        ipmi_sel_when="2026-01-05T10:05:00",  # the fixture's captured_on is 2026-01-15
+    )
+
+    def _assessed_with_window(weeks: int) -> HostInfo:
+        host = HostInfo(hostname="h", bundle_source=str(host_dir), log_window_weeks=weeks)
+        for module in PARSER_MODULES:
+            host.parse_warnings.extend(module.parse(host_dir, host))
+        return host
+
+    narrow_findings = evaluate_all([_assessed_with_window(1)])
+    wide_findings = evaluate_all([_assessed_with_window(2)])
+    assert "hardware.sel_ecc_uncorrectable" not in {f.rule_id for f in narrow_findings}
+    assert "hardware.sel_ecc_uncorrectable" in {f.rule_id for f in wide_findings}
+
+
 def test_fleet_disabled_rules_are_excluded():
     host_a = HostInfo(hostname="host-a", bundle_source="a", cpu_model="Intel Xeon Gold 6258R")
     host_b = HostInfo(hostname="host-b", bundle_source="b", cpu_model="Intel Xeon Gold 6430")

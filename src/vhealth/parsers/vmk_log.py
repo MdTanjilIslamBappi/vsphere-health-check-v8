@@ -13,16 +13,17 @@ Only a bounded number of representative example lines per signal are kept
 size for a host with a long, noisy log history; the full occurrence count
 is still recorded.
 
-**Quarterly scope.** A retained log rotation can span well over a year on
-a quiet host. This assessment is a point-in-time *quarterly* health check,
-so only log lines timestamped within the last ``_LOG_WINDOW_DAYS`` (90)
-days of the bundle's own capture date count toward findings in
-``log_signal_counts`` -- older matches are tallied separately in
-``log_signal_counts_excluded`` rather than discarded outright, so nothing
-is silently lost, but they do not drive an active finding in a report
-scoped to this quarter. A line with no parseable leading timestamp, or a
-bundle with no parseable capture date, is treated as in-window rather than
-guessed away.
+**Configurable scope.** A retained log rotation can span well over a year
+on a quiet host. This assessment is a point-in-time health check, so only
+log lines timestamped within the last ``host.log_window_weeks`` (1-26,
+default 13 -- see ``AssessmentConfig.log_window_weeks`` / ``vhealth
+assess --weeks``) weeks of the bundle's own capture date count toward
+findings in ``log_signal_counts`` -- older matches are tallied separately
+in ``log_signal_counts_excluded`` rather than discarded outright, so
+nothing is silently lost, but they do not drive an active finding in a
+report scoped to that window. A line with no parseable leading
+timestamp, or a bundle with no parseable capture date, is treated as
+in-window rather than guessed away.
 """
 
 from __future__ import annotations
@@ -34,11 +35,10 @@ from pathlib import Path
 
 from vhealth.models.host import HostInfo
 
-VERSION = "2.0.0"
+VERSION = "3.0.0"
 
 _MAX_EXAMPLES_PER_SIGNAL = 5
 _MAX_ROTATIONS = 8
-_LOG_WINDOW_DAYS = 90
 
 _VMKWARNING_SIGNALS: dict[str, re.Pattern[str]] = {
     "pdl_error": re.compile(r"PDL error|nmp_PathDetermineFailure", re.I),
@@ -63,11 +63,11 @@ def parse(host_dir: Path, host: HostInfo) -> list[str]:
     if not log_dir.is_dir():
         return ["var/run/log not found; log-based signals unavailable"]
 
-    cutoff = _quarterly_cutoff(host.captured_on)
+    cutoff = _window_cutoff(host.captured_on, host.log_window_weeks)
     if cutoff is None:
         warnings.append(
             "Could not determine the bundle's capture date; log signals were not filtered "
-            "to the last 90 days (quarterly scope)."
+            f"to the configured {host.log_window_weeks}-week window."
         )
 
     found_any_rotation = False
@@ -83,7 +83,7 @@ def parse(host_dir: Path, host: HostInfo) -> list[str]:
     return warnings
 
 
-def _quarterly_cutoff(captured_on: str | None) -> date | None:
+def _window_cutoff(captured_on: str | None, window_weeks: int) -> date | None:
     if not captured_on:
         return None
     match = _CAPTURED_ON_DATE_RE.match(captured_on)
@@ -93,7 +93,7 @@ def _quarterly_cutoff(captured_on: str | None) -> date | None:
         captured_date = datetime.strptime(match.group(1), "%Y-%m-%d").date()
     except ValueError:
         return None
-    return captured_date - timedelta(days=_LOG_WINDOW_DAYS)
+    return captured_date - timedelta(weeks=window_weeks)
 
 
 def _line_date(line: str) -> date | None:

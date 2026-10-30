@@ -194,6 +194,41 @@ def test_run_assessment_flags_mobility_health_check_error(tmp_path):
     assert "network.mobility_health_check_error" in rule_ids
 
 
+def test_run_assessment_flags_pending_reboot_image(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz",
+        pending_reboot=True,
+        pending_reboot_image_name="(Updated) ESXi-8.0U3j-standard",
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    host = assessment.hosts[0]
+    assert host.pending_reboot_data_available is True
+    assert host.pending_reboot_image_name == "(Updated) ESXi-8.0U3j-standard"
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "hardware.pending_reboot_image" in rule_ids
+
+
+def test_run_assessment_honours_configured_log_window_weeks(tmp_path):
+    import dataclasses
+
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz",
+        ipmi_sel_message="Assert + Memory Uncorrectable ECC",
+        ipmi_sel_when="2026-01-05T10:05:00",  # the fixture's captured_on is 2026-01-15
+    )
+    base_config = load_config(None)
+
+    narrow_config = dataclasses.replace(base_config, log_window_weeks=1)
+    narrow = run_assessment(bundle_path, tmp_path / "out-narrow", narrow_config)
+    assert "hardware.sel_ecc_uncorrectable" not in {f.rule_id for f in narrow.findings}
+
+    wide_config = dataclasses.replace(base_config, log_window_weeks=2)
+    wide = run_assessment(bundle_path, tmp_path / "out-wide", wide_config)
+    assert "hardware.sel_ecc_uncorrectable" in {f.rule_id for f in wide.findings}
+
+
 def test_run_assessment_on_multi_host_vcenter_zip(tmp_path):
     bundle_path = build_vcenter_zip(
         tmp_path / "vc.zip", hostnames=["esxi-a.example.test", "esxi-b.example.test"]

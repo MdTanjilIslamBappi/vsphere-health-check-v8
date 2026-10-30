@@ -9,14 +9,20 @@ from vhealth.parsers import PARSER_MODULES
 from vhealth.parsers import vcenter as vcenter_parser
 
 
-def build_host_infos(bundle_refs: list[HostBundleRef]) -> list[HostInfo]:
+def build_host_infos(
+    bundle_refs: list[HostBundleRef], log_window_weeks: int = 13
+) -> list[HostInfo]:
     hosts: list[HostInfo] = []
     for ref in bundle_refs:
         # Store the bundle directory *name*, not its absolute path: the
         # absolute path lives under a freshly randomised extraction temp
         # directory on every run, which would otherwise make two
         # assessments of the identical input bundle non-comparable.
-        host = HostInfo(hostname=ref.hostname_hint, bundle_source=ref.root.name)
+        host = HostInfo(
+            hostname=ref.hostname_hint,
+            bundle_source=ref.root.name,
+            log_window_weeks=log_window_weeks,
+        )
         for module in PARSER_MODULES:
             try:
                 warnings = module.parse(ref.root, host)

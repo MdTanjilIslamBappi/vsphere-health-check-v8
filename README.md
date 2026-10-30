@@ -102,6 +102,10 @@ vhealth assess support-bundle.zip ./out
 # instead, and its path is printed at the end
 vhealth assess support-bundle.zip
 
+# Only count log/event-history signals from the last 4 weeks instead of
+# the default 13 (1-26 weeks allowed)
+vhealth assess support-bundle.zip ./out --weeks 4
+
 # Re-render reports from a saved assessment.json (no need to re-parse)
 vhealth report --assessment ./out/assessment.json --format docx,html --output ./out
 ```
@@ -155,10 +159,15 @@ companion `findings-log.docx`/`findings-log.html` with the full
 per-finding detail (evidence lines, remediation, limitations) -- the main
 report stays a concise executive read, and nothing is lost.
 
-Log-based findings (PDL/APD/dead-path/ALUA/VOB from `vmkwarning`/`vobd`)
-are scoped to the last 90 days of the bundle's own capture date, since
-this is meant as a quarterly health check; older matches are still
-counted (not discarded) but don't drive an active finding.
+Log-based findings (PDL/APD/dead-path/ALUA/VOB from `vmkwarning`/`vobd`,
+and the IPMI SEL hardware-event-history findings) are scoped to a
+configurable lookback window of the bundle's own capture date -- 1 to
+26 weeks, default 13 (91 days, about a quarter) -- via `vhealth assess
+--weeks N` or the `assessment.log_window_weeks` config key; older
+matches are still counted (not discarded) but don't drive an active
+finding. The chosen window is always stated in the report's own text
+(Scope of Health Check, Executive Summary, and each affected finding's
+own wording), so a reader never has to guess what period was covered.
 
 ## How it works
 

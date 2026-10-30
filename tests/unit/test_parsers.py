@@ -13,6 +13,7 @@ from vhealth.parsers import (
     multipath,
     nic_link,
     ntp,
+    pending_reboot,
     readme,
     sensors,
     smart,
@@ -488,3 +489,28 @@ def test_mobility_parser_reports_warning_when_file_missing(tmp_path):
     warnings = mobility.parse(host_dir, host)
     assert warnings != []
     assert host.mobility_data_available is False
+
+
+def test_pending_reboot_parser_reports_no_pending_image(tmp_path):
+    host_dir, host = _build_host(tmp_path, pending_reboot=False)
+    warnings = pending_reboot.parse(host_dir, host)
+    assert warnings == []
+    assert host.pending_reboot_data_available is True
+    assert host.pending_reboot_image_name is None
+
+
+def test_pending_reboot_parser_reports_staged_image(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path, pending_reboot=True, pending_reboot_image_name="(Updated) ESXi-8.0U3j-standard"
+    )
+    warnings = pending_reboot.parse(host_dir, host)
+    assert warnings == []
+    assert host.pending_reboot_data_available is True
+    assert host.pending_reboot_image_name == "(Updated) ESXi-8.0U3j-standard"
+
+
+def test_pending_reboot_parser_reports_warning_when_file_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = pending_reboot.parse(host_dir, host)
+    assert warnings != []
+    assert host.pending_reboot_data_available is False

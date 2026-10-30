@@ -17,6 +17,7 @@ from vhealth.parsers import (
     multipath,
     nic_link,
     ntp,
+    pending_reboot,
     readme,
     sensors,
     smart,
@@ -47,6 +48,7 @@ PARSER_MODULES = [
     nic_link,
     configstore,
     mobility,
+    pending_reboot,
 ]
 
 PARSER_VERSIONS = {m.__name__.rsplit(".", 1)[-1]: m.VERSION for m in PARSER_MODULES}

@@ -95,22 +95,29 @@ def _log_signal_findings(host: HostInfo) -> list[Finding]:
             if e.startswith(f"[{signal_name}]")
         ]
         excluded = host.log_signal_counts_excluded.get(signal_name, 0)
+        window_weeks = host.log_window_weeks
         findings.append(
             Finding(
                 rule_id=rule_id,
                 title=title,
                 severity=severity,
-                summary=f"{count} matching log line(s) found in the last 90 days (this quarter).",
+                summary=(
+                    f"{count} matching log line(s) found in the last {window_weeks} "
+                    f"week(s) ({window_weeks * 7} days)."
+                ),
                 evidence=examples,
                 affected_host=host.hostname,
                 remediation=where_to_check,
                 limitations=(
-                    f"{note} Scoped to this quarter (the last 90 days of the bundle's own "
-                    "capture date); only the rotations retained in the bundle at capture "
-                    "time were scanned (older events may already have rolled off)."
+                    f"{note} Scoped to the last {window_weeks} week(s) "
+                    f"({window_weeks * 7} days) of the bundle's own capture date (the "
+                    "configured log-signal lookback window -- see "
+                    "AssessmentConfig.log_window_weeks / `vhealth assess --weeks`); only "
+                    "the rotations retained in the bundle at capture time were scanned "
+                    "(older events may already have rolled off)."
                     + (
                         f" {excluded} additional older occurrence(s) were also found in "
-                        "the bundle but fall outside this quarter's window."
+                        "the bundle but fall outside this window."
                         if excluded
                         else ""
                     )

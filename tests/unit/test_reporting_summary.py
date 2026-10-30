@@ -30,6 +30,7 @@ def test_component_status_rows_marks_unassessed_vcenter_sections():
     assert rows["Network (vSwitch/DVS)"].status == summary.NOT_ASSESSED
     assert rows["ConfigStore Integrity"].status == summary.NOT_ASSESSED
     assert rows["Migration Network Health"].status == summary.NOT_ASSESSED
+    assert rows["Pending Reboot (Image Profile)"].status == summary.NOT_ASSESSED
 
 
 def test_component_status_rows_reports_real_datastore_and_vm_data_when_present():
@@ -259,6 +260,40 @@ def test_component_status_rows_reports_mobility_healthy_when_no_errors():
     assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
     rows = {row.component: row for row in summary.component_status_rows(assessment)}
     assert rows["Migration Network Health"].status == "Healthy"
+
+
+def test_component_status_rows_reports_pending_reboot_image():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        pending_reboot_data_available=True,
+        pending_reboot_image_name="(Updated) ESXi-8.0U3j-standard",
+    )
+    finding = Finding(
+        rule_id="hardware.pending_reboot_image",
+        title="Host has an image profile staged but not yet applied by a reboot",
+        severity=Severity.MEDIUM,
+        summary="...",
+        affected_host="h1",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    pending_row = rows["Pending Reboot (Image Profile)"]
+    assert pending_row.status == "Advisory"
+    assert "h1" in pending_row.remarks
+    assert summary.category_for_rule_id("hardware.pending_reboot_image") == "Other"
+
+
+def test_component_status_rows_reports_pending_reboot_healthy_when_none_staged():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        pending_reboot_data_available=True,
+        pending_reboot_image_name=None,
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["Pending Reboot (Image Profile)"].status == "Healthy"
 
 
 def test_component_status_rows_reports_vswitch_single_uplink():
@@ -559,7 +594,21 @@ def test_hardware_status_grid_marks_management_connection_not_assessed():
     assert grid.management_connection == summary.NOT_ASSESSED
 
 
-def test_detailed_observations_mentions_quarterly_window():
+def test_detailed_observations_mentions_default_log_window():
     assessment = Assessment(metadata=_metadata(), hosts=[], findings=[])
     items = summary.detailed_observations(assessment)
-    assert any("90 days" in item for item in items)
+    assert any("13 week(s) (91 days)" in item for item in items)
+
+
+def test_detailed_observations_reflects_configured_log_window():
+    host = HostInfo(hostname="h1", bundle_source="h1", log_window_weeks=4)
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    items = summary.detailed_observations(assessment)
+    assert any("4 week(s) (28 days)" in item for item in items)
+
+
+def test_executive_summary_text_reflects_configured_log_window():
+    host = HostInfo(hostname="h1", bundle_source="h1", log_window_weeks=26)
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    text = summary.executive_summary_text(assessment)
+    assert "26 week(s) (182 days)" in text

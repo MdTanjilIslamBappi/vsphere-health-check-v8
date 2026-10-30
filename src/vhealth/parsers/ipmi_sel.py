@@ -19,12 +19,14 @@ intrusion, which fires routinely during legitimate maintenance access,
 and ambiguous paired redundancy-state transitions) are intentionally not
 reported on, to avoid flooding a report with routine BMC chatter.
 
-**Quarterly scope.** Same convention as ``vmk_log.py``: only SEL records
-timestamped within the last ``_WINDOW_DAYS`` (90) days of the bundle's
-own capture date count toward an active finding (``host.log_signal_counts``);
-older matches are tallied in ``host.log_signal_counts_excluded`` instead,
-and both share those fields with ``vmk_log.py``'s own signals (distinct
-key names keep the two sources from colliding).
+**Configurable scope.** Same convention as ``vmk_log.py``: only SEL
+records timestamped within the last ``host.log_window_weeks`` (1-26,
+default 13 -- see ``AssessmentConfig.log_window_weeks`` / ``vhealth
+assess --weeks``) weeks of the bundle's own capture date count toward an
+active finding (``host.log_signal_counts``); older matches are tallied
+in ``host.log_signal_counts_excluded`` instead, and both share those
+fields with ``vmk_log.py``'s own signals (distinct key names keep the
+two sources from colliding).
 """
 
 from __future__ import annotations
@@ -35,13 +37,12 @@ from pathlib import Path
 
 from vhealth.models.host import HostInfo
 
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 
 _FILENAME = "localcli_hardware-ipmi-sel-list--p--i--n-all.txt"
 _FIELD_RE = re.compile(r"^ {3}([^:]+):\s?(.*)$")
 _WHEN_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})T")
 _CAPTURED_ON_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
-_WINDOW_DAYS = 90
 _MAX_EXAMPLES_PER_SIGNAL = 5
 
 _SEL_SIGNALS: dict[str, re.Pattern[str]] = {
@@ -62,7 +63,7 @@ def parse(host_dir: Path, host: HostInfo) -> list[str]:
     if not blocks:
         return [f"{_FILENAME} did not match the expected block format"]
 
-    cutoff = _quarterly_cutoff(host.captured_on)
+    cutoff = _window_cutoff(host.captured_on, host.log_window_weeks)
     for block in blocks:
         message = block.get("Message", "")
         when = block.get("When", "")
@@ -83,7 +84,7 @@ def parse(host_dir: Path, host: HostInfo) -> list[str]:
     return []
 
 
-def _quarterly_cutoff(captured_on: str | None) -> date | None:
+def _window_cutoff(captured_on: str | None, window_weeks: int) -> date | None:
     if not captured_on:
         return None
     match = _CAPTURED_ON_DATE_RE.match(captured_on)
@@ -93,7 +94,7 @@ def _quarterly_cutoff(captured_on: str | None) -> date | None:
         captured_date = datetime.strptime(match.group(1), "%Y-%m-%d").date()
     except ValueError:
         return None
-    return captured_date - timedelta(days=_WINDOW_DAYS)
+    return captured_date - timedelta(weeks=window_weeks)
 
 
 def _parse_date(when: str) -> date | None:
