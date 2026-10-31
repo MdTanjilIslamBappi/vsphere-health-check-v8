@@ -2,77 +2,34 @@
 
 Source: ``var/lib/vmware/osdata/healthd/vmw.memoryHealth-*.json`` -- one
 of ``healthd``'s periodic self-checks (every 5 minutes, observed), kept
-as several rotated snapshots rather than a single file. Each snapshot
-carries two independent sub-states: ``hardware_info.hardware_state``
+as several rotated snapshots rather than a single file (see
+``parsers/_healthd.py`` for how the most recent one is selected). Each
+snapshot carries two independent sub-states: ``hardware_info.hardware_state``
 (physical/ECC memory health, plus corrected/uncorrected error tallies
 since boot) and ``reservation_info.reservation_state`` (the host's
 memory-reservation admission-control health). Both are ESXi's own
 "Green"/"Yellow"/"Red"-style verdict, not something vhealth infers from
 raw counters.
-
-The rotated filenames (``-0``, ``-1``, ``-2``, ...) are not in
-chronological order -- each snapshot's own ``structured.time`` field is,
-so the most recent snapshot is selected by parsing and comparing that
-timestamp, not by filename.
 """
 
 from __future__ import annotations
 
-import json
-from datetime import datetime
 from pathlib import Path
 
 from vhealth.models.host import HostInfo
+from vhealth.parsers._healthd import latest_snapshot
 
 VERSION = "1.0.0"
 
-_HEALTHD_RELATIVE_DIR = Path("var") / "lib" / "vmware" / "osdata" / "healthd"
-_GLOB = "vmw.memoryHealth-*.json"
+_CHECK_NAME = "vmw.memoryHealth"
 
 
 def parse(host_dir: Path, host: HostInfo) -> list[str]:
-    healthd_dir = host_dir / _HEALTHD_RELATIVE_DIR
-    if not healthd_dir.is_dir():
-        return [f"{_HEALTHD_RELATIVE_DIR} not found; memory-health status unavailable"]
-
-    paths = sorted(healthd_dir.glob(_GLOB))
-    if not paths:
-        return [
-            f"No {_GLOB} files found under {_HEALTHD_RELATIVE_DIR}; "
-            "memory-health status unavailable"
-        ]
-
-    latest_time: datetime | None = None
-    latest_data: dict | None = None
-    warnings: list[str] = []
-    for path in paths:
-        try:
-            data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
-        except (OSError, json.JSONDecodeError):
-            warnings.append(f"{path.name} did not contain valid JSON; skipped")
-            continue
-        if not isinstance(data, dict):
-            continue
-        structured = data.get("structured")
-        time_str = structured.get("time") if isinstance(structured, dict) else None
-        if not isinstance(time_str, str):
-            continue
-        try:
-            snapshot_time = datetime.fromisoformat(time_str)
-        except ValueError:
-            continue
-        if latest_time is None or snapshot_time > latest_time:
-            latest_time = snapshot_time
-            latest_data = data
-
-    if latest_data is None:
-        warnings.append(
-            f"None of the {len(paths)} {_GLOB} file(s) contained a recognisable "
-            "structured.time; memory-health status unavailable"
-        )
+    data, warnings = latest_snapshot(host_dir, _CHECK_NAME)
+    if data is None:
         return warnings
 
-    unstructured = latest_data.get("unstructured")
+    unstructured = data.get("unstructured")
     if not isinstance(unstructured, dict):
         warnings.append("Most recent vmw.memoryHealth snapshot had no 'unstructured' section")
         return warnings

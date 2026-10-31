@@ -52,6 +52,7 @@ _MEMORY_RULE_IDS = {
     "hardware.memory_hardware_health_degraded",
     "hardware.memory_reservation_health_degraded",
 }
+_NFS_DATASTORE_RULE_IDS = {"storage.nfs_datastore_inaccessible"}
 _MULTIPATH_RULE_IDS = {
     "storage.multipath_all_paths_dead",
     "storage.multipath_reduced_redundancy",
@@ -220,6 +221,14 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         else "Memory health -- not assessed; no vmw.memoryHealth healthd data found "
         "in this bundle"
     )
+    has_nfs_health_data = any(h.nfs_health_data_available for h in assessment.hosts)
+    nfs_health_item = (
+        "NFS datastore mount accessibility, per ESXi's own built-in healthd check "
+        "(vmw.nfsDatastoreHealth)"
+        if has_nfs_health_data
+        else "NFS datastore mount accessibility -- not assessed; no "
+        "vmw.nfsDatastoreHealth healthd data found in this bundle"
+    )
     log_window_label = _log_window_label(assessment)
     if vcenter is None:
         return (
@@ -239,6 +248,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
             mobility_item,
             pending_reboot_item,
             memory_health_item,
+            nfs_health_item,
             evc_item,
             datastore_item,
             vm_item,
@@ -262,6 +272,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         mobility_item,
         pending_reboot_item,
         memory_health_item,
+        nfs_health_item,
         evc_item,
         datastore_item,
         vm_item,
@@ -654,6 +665,39 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
             "in this bundle."
         )
     rows.append(ComponentStatus("Memory Health", memory_health_status, memory_health_remark))
+
+    hosts_with_nfs_health_data = [h for h in hosts if h.nfs_health_data_available]
+    if hosts_with_nfs_health_data:
+        affected = [
+            h
+            for h in hosts_with_nfs_health_data
+            if any(not ds.is_accessible or not ds.is_mounted for ds in h.nfs_datastores)
+        ]
+        nfs_health_findings = _by_ids(findings, _NFS_DATASTORE_RULE_IDS)
+        nfs_health_status = (
+            _status_label(_worst_severity(nfs_health_findings))
+            if nfs_health_findings
+            else "Healthy"
+        )
+        if affected:
+            nfs_health_remark = (
+                f"{len(affected)} of {len(hosts_with_nfs_health_data)} host(s) report at "
+                f"least one NFS datastore not accessible/mounted: "
+                f"{', '.join(h.hostname for h in affected)}."
+            )
+        else:
+            nfs_health_remark = (
+                f"All {len(hosts_with_nfs_health_data)} of {total} host(s) with "
+                "NFS-datastore-health data report every known NFS mount accessible "
+                "and mounted (including hosts with no NFS datastores configured)."
+            )
+    else:
+        nfs_health_status = NOT_ASSESSED
+        nfs_health_remark = (
+            "NFS datastore mount accessibility -- not assessed; no "
+            "vmw.nfsDatastoreHealth healthd data found in this bundle."
+        )
+    rows.append(ComponentStatus("NFS Datastore Health", nfs_health_status, nfs_health_remark))
 
     hosts_with_switch_data = [h for h in hosts if h.network_switch_data_available]
     if hosts_with_switch_data:
@@ -1062,6 +1106,7 @@ _CATEGORY_BY_RULE_ID = {
     "storage.path_dead_detected": "Storage",
     "storage.alua_path_connectivity": "Storage",
     "storage.vob_problem_event": "Storage",
+    "storage.nfs_datastore_inaccessible": "Storage",
     "hardware.ipmi_sensor_asserted": "Hardware / SEL",
     "hardware.sel_ecc_uncorrectable": "Hardware / SEL",
     "hardware.sel_drive_predictive_failure": "Hardware / SEL",

@@ -110,6 +110,7 @@ def build_host_dir(
     memory_reservation_state: str | None = None,
     memory_corrected_errors_since_boot: int = 0,
     memory_uncorrected_errors_since_boot: int = 0,
+    nfs_datastores: list[dict] | None = None,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -195,6 +196,16 @@ def build_host_dir(
     (plus ``memory_corrected_errors_since_boot``/
     ``memory_uncorrected_errors_since_boot``); left as ``None`` for both,
     no memory-health data is written at all (memory health not assessed).
+
+    ``nfs_datastores``, if given (including ``[]``), adds a single
+    rotated ``vmw.nfsDatastoreHealth`` healthd JSON snapshot whose
+    ``unstructured`` list is exactly the dicts passed (e.g.
+    ``[{"volume_name": "NFS-01", "is_accessible": False, "is_mounted":
+    False, "remote_share_name": "/export/nfs01", "remote_host(s)":
+    ["192.168.1.50"]}]``); ``[]`` means "no NFS datastores configured",
+    a valid healthy state distinct from not having run this check at
+    all. Left as ``None``, no NFS-datastore-health data is written at
+    all (NFS datastore health not assessed).
     """
     bundle_dir = root / f"esx-{hostname}-2026-01-15"
     (bundle_dir / "commands").mkdir(parents=True)
@@ -557,6 +568,21 @@ def build_host_dir(
         }
         (healthd_dir / "vmw.memoryHealth-0.json").write_text(
             json.dumps(memory_health_dump), encoding="utf-8"
+        )
+
+    if nfs_datastores is not None:
+        healthd_dir = bundle_dir / "var" / "lib" / "vmware" / "osdata" / "healthd"
+        healthd_dir.mkdir(parents=True, exist_ok=True)
+        nfs_health_dump = {
+            "structured": {
+                "name": "vmw.nfsDatastoreHealth",
+                "status": 2 if any(not d.get("is_accessible", True) for d in nfs_datastores) else 3,
+                "time": "2026-01-15T10:00:00+00:00",
+            },
+            "unstructured": nfs_datastores,
+        }
+        (healthd_dir / "vmw.nfsDatastoreHealth-0.json").write_text(
+            json.dumps(nfs_health_dump), encoding="utf-8"
         )
 
     return bundle_dir

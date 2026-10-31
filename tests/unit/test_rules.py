@@ -479,6 +479,50 @@ def test_memory_health_green_raises_no_finding(tmp_path):
     assert "hardware.memory_reservation_health_degraded" not in rule_ids
 
 
+def test_nfs_datastore_inaccessible_raises_high_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path,
+        nfs_datastores=[
+            {
+                "volume_name": "NFS-V9",
+                "remote_share_name": "/NFS-V9",
+                "remote_host(s)": ["192.168.187.110"],
+                "is_accessible": False,
+                "is_mounted": False,
+            }
+        ],
+    )
+    findings = evaluate_all([host])
+    nfs = [f for f in findings if f.rule_id == "storage.nfs_datastore_inaccessible"]
+    assert len(nfs) == 1
+    assert nfs[0].severity.value == "high"
+    assert "NFS-V9" in nfs[0].summary
+    assert nfs[0].affected_object == "NFS-V9"
+
+
+def test_nfs_datastore_accessible_raises_no_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path,
+        nfs_datastores=[
+            {
+                "volume_name": "NFS-V9",
+                "is_accessible": True,
+                "is_mounted": True,
+            }
+        ],
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "storage.nfs_datastore_inaccessible" not in rule_ids
+
+
+def test_no_nfs_datastores_raises_no_finding(tmp_path):
+    host = _assessed_host(tmp_path, nfs_datastores=[])
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "storage.nfs_datastore_inaccessible" not in rule_ids
+
+
 def test_log_window_weeks_controls_whether_sel_finding_fires(tmp_path):
     """An event 10 days before capture (within a 2-week window, outside a
 

@@ -227,6 +227,29 @@ def test_run_assessment_flags_degraded_memory_health(tmp_path):
     assert "hardware.memory_hardware_health_degraded" in rule_ids
 
 
+def test_run_assessment_flags_inaccessible_nfs_datastore(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz",
+        nfs_datastores=[
+            {
+                "volume_name": "NFS-V9",
+                "remote_share_name": "/NFS-V9",
+                "remote_host(s)": ["192.168.187.110"],
+                "is_accessible": False,
+                "is_mounted": False,
+            }
+        ],
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    host = assessment.hosts[0]
+    assert host.nfs_health_data_available is True
+    assert host.nfs_datastores[0].is_accessible is False
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "storage.nfs_datastore_inaccessible" in rule_ids
+
+
 def test_run_assessment_honours_configured_log_window_weeks(tmp_path):
     import dataclasses
 

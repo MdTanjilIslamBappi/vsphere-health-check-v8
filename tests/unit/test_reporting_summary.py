@@ -1,6 +1,12 @@
 from vhealth.models.assessment import Assessment, AssessmentMetadata
 from vhealth.models.findings import Finding, Severity
-from vhealth.models.host import Datastore, HostInfo, NetworkSwitch, VirtualMachine
+from vhealth.models.host import (
+    Datastore,
+    HostInfo,
+    NetworkSwitch,
+    NfsDatastoreHealth,
+    VirtualMachine,
+)
 from vhealth.reporting import summary
 
 
@@ -32,6 +38,7 @@ def test_component_status_rows_marks_unassessed_vcenter_sections():
     assert rows["Migration Network Health"].status == summary.NOT_ASSESSED
     assert rows["Pending Reboot (Image Profile)"].status == summary.NOT_ASSESSED
     assert rows["Memory Health"].status == summary.NOT_ASSESSED
+    assert rows["NFS Datastore Health"].status == summary.NOT_ASSESSED
 
 
 def test_component_status_rows_reports_real_datastore_and_vm_data_when_present():
@@ -332,6 +339,40 @@ def test_component_status_rows_reports_memory_healthy_when_all_green():
     assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
     rows = {row.component: row for row in summary.component_status_rows(assessment)}
     assert rows["Memory Health"].status == "Healthy"
+
+
+def test_component_status_rows_reports_inaccessible_nfs_datastore():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        nfs_health_data_available=True,
+        nfs_datastores=[
+            NfsDatastoreHealth(volume_name="NFS-V9", is_accessible=False, is_mounted=False)
+        ],
+    )
+    finding = Finding(
+        rule_id="storage.nfs_datastore_inaccessible",
+        title="NFS datastore is not accessible/mounted",
+        severity=Severity.HIGH,
+        summary="...",
+        affected_host="h1",
+        affected_object="NFS-V9",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    nfs_row = rows["NFS Datastore Health"]
+    assert nfs_row.status == "Attention Needed"
+    assert "h1" in nfs_row.remarks
+    assert summary.category_for_rule_id("storage.nfs_datastore_inaccessible") == "Storage"
+
+
+def test_component_status_rows_reports_nfs_healthy_when_no_datastores():
+    host = HostInfo(
+        hostname="h1", bundle_source="h1", nfs_health_data_available=True, nfs_datastores=[]
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["NFS Datastore Health"].status == "Healthy"
 
 
 def test_component_status_rows_reports_vswitch_single_uplink():

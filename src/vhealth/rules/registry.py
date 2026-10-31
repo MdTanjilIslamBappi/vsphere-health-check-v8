@@ -13,6 +13,7 @@ from vhealth.rules import (
     mobility_rules,
     multipath_rules,
     network_rules,
+    nfs_datastore_rules,
     ntp_rules,
     pending_reboot_rules,
     sel_rules,
@@ -23,7 +24,7 @@ from vhealth.rules import (
 )
 from vhealth.rules.base import FleetRule, Rule
 
-RULE_ENGINE_VERSION = "1.15.0"
+RULE_ENGINE_VERSION = "1.16.0"
 
 ALL_RULES: list[Rule] = [
     *storage_rules.RULES,
@@ -40,6 +41,7 @@ ALL_RULES: list[Rule] = [
     *mobility_rules.RULES,
     *pending_reboot_rules.RULES,
     *memory_rules.RULES,
+    *nfs_datastore_rules.RULES,
 ]
 
 ALL_FLEET_RULES: list[FleetRule] = [

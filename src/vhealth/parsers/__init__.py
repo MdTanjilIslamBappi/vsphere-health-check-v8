@@ -16,6 +16,7 @@ from vhealth.parsers import (
     memory_health,
     mobility,
     multipath,
+    nfs_datastore_health,
     nic_link,
     ntp,
     pending_reboot,
@@ -51,6 +52,7 @@ PARSER_MODULES = [
     mobility,
     pending_reboot,
     memory_health,
+    nfs_datastore_health,
 ]
 
 PARSER_VERSIONS = {m.__name__.rsplit(".", 1)[-1]: m.VERSION for m in PARSER_MODULES}

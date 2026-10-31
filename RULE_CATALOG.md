@@ -49,6 +49,7 @@ than as one flat list: `Storage`, `Hardware / SEL`, `CPU`, `Network`,
 | `hardware.pending_reboot_image` | Other | Host has an image profile staged but not yet applied by a reboot | Medium | `pending_reboot_image_name` (from `esxcli software profile get --rebooting-image`) | Point-in-time snapshot at capture only; cannot tell how long the reboot has been pending or why it was deferred. Not yet observed firing against real-world data (see below). |
 | `hardware.memory_hardware_health_degraded` | Memory | ESXi reports degraded physical memory (ECC) health | Critical | `memory_hardware_state` (from healthd's `vmw.memoryHealth` check, not something vhealth infers) | Point-in-time snapshot from whichever rotated healthd snapshot has the most recent timestamp in the bundle; ESXi's own self-check, sampled every few minutes. Not yet observed firing against real-world data (see below). |
 | `hardware.memory_reservation_health_degraded` | Memory | ESXi reports degraded memory-reservation health | Medium | `memory_reservation_state` (from healthd's `vmw.memoryHealth` check, not something vhealth infers) | Same point-in-time/healthd-self-check caveat as `memory_hardware_health_degraded`; independent of it -- a host can fail one sub-check while passing the other. Not yet observed firing against real-world data (see below). |
+| `storage.nfs_datastore_inaccessible` | Storage | NFS datastore is not accessible/mounted | High | `nfs_datastores[].is_accessible`/`.is_mounted` (from healthd's `vmw.nfsDatastoreHealth` check, not something vhealth infers) | Point-in-time snapshot from whichever rotated healthd snapshot has the most recent timestamp in the bundle; cannot tell whether this is a transient NFS server blip, a sustained outage, or an intentional detach (e.g. decommissioning). **Fired against real data on first try** (see below). |
 
 ## Validation status
 
@@ -249,6 +250,18 @@ minutes apart; the parser selects the one with the latest
 corrected/uncorrected ECC errors since boot on every host. The firing
 (non-Green) case for either sub-check has not yet been observed
 against real-world data and is covered by a synthetic unit test only.
+
+`storage.nfs_datastore_inaccessible` fired against real data on first
+try: on the real 10-host EAMSC2 bundle, 9 of the 10 hosts' healthd
+`vmw.nfsDatastoreHealth` snapshots report an empty datastore list (no
+NFS datastores configured on those hosts at all), but `eamsc2esxi07`'s
+snapshot lists two NFS volumes -- `NFS-V9` (share `/NFS-V9`) and
+`NFC-V9` -- both reported `is_accessible: false` and `is_mounted:
+false` against remote host `192.168.187.110`, a genuine,
+previously-unreported storage-connectivity problem on that one host,
+surfaced directly by ESXi's own tooling rather than inferred. Both the
+firing path (this host) and the "no NFS datastores configured" healthy
+path (every other host) are therefore real-data-validated.
 
 ## Adding a rule
 

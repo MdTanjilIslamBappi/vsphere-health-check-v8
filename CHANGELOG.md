@@ -341,6 +341,25 @@ and the "Known limitations" section of [README.md](README.md)).
   healthy (non-firing) path is real-data-confirmed; the firing path
   for either sub-check is covered by a synthetic unit test only,
   stated explicitly in RULE_CATALOG.md.
+- `storage.nfs_datastore_inaccessible` rule and
+  `nfs_datastore_health.py` parser: reads ESXi's own built-in `healthd`
+  per-NFS-datastore health check (`vmw.nfsDatastoreHealth-*.json`),
+  which reports each known NFS mount's own `is_accessible`/`is_mounted`
+  verdict, not something vhealth infers; an empty list is a valid
+  healthy state meaning no NFS datastore is configured at all, distinct
+  from one configured but currently down. New "NFS Datastore Health"
+  component row and scope item, folded into the existing "Storage"
+  category. Extracted the rotated-snapshot-selection logic shared with
+  `memory_health.py` into a new internal helper,
+  `parsers/_healthd.py::latest_snapshot`, rather than duplicating it a
+  second time. **Fired against real data on first try**: on the real
+  10-host EAMSC2 bundle, 9 of 10 hosts report no NFS datastores
+  configured, but `eamsc2esxi07` reports two NFS volumes (`NFS-V9`,
+  `NFC-V9`) both `is_accessible: false` and `is_mounted: false` against
+  remote host `192.168.187.110` -- a genuine, previously-unreported
+  storage-connectivity problem on that one host, surfaced directly by
+  ESXi's own tooling. Both the firing path (this host) and the healthy
+  path (every other host) are real-data-validated.
 
 ### Fixed
 

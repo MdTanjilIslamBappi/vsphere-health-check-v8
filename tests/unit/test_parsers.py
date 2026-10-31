@@ -12,6 +12,7 @@ from vhealth.parsers import (
     memory_health,
     mobility,
     multipath,
+    nfs_datastore_health,
     nic_link,
     ntp,
     pending_reboot,
@@ -598,3 +599,45 @@ def test_memory_health_parser_picks_snapshot_with_latest_timestamp(tmp_path):
     assert warnings == []
     assert host.memory_hardware_state == "Red"
     assert host.memory_corrected_errors_since_boot == 3
+
+
+def test_nfs_datastore_health_parser_reports_no_datastores(tmp_path):
+    host_dir, host = _build_host(tmp_path, nfs_datastores=[])
+    warnings = nfs_datastore_health.parse(host_dir, host)
+    assert warnings == []
+    assert host.nfs_health_data_available is True
+    assert host.nfs_datastores == []
+
+
+def test_nfs_datastore_health_parser_reports_inaccessible_datastore(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path,
+        nfs_datastores=[
+            {
+                "volume_name": "NFS-V9",
+                "remote_share_name": "/NFS-V9",
+                "remote_host(s)": ["192.168.187.110"],
+                "version": "NFSv41",
+                "is_accessible": False,
+                "is_mounted": False,
+                "is_read_only": False,
+                "inaccessible_reason": "",
+            }
+        ],
+    )
+    warnings = nfs_datastore_health.parse(host_dir, host)
+    assert warnings == []
+    assert host.nfs_health_data_available is True
+    assert len(host.nfs_datastores) == 1
+    ds = host.nfs_datastores[0]
+    assert ds.volume_name == "NFS-V9"
+    assert ds.remote_hosts == ["192.168.187.110"]
+    assert ds.is_accessible is False
+    assert ds.is_mounted is False
+
+
+def test_nfs_datastore_health_parser_reports_warning_when_data_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = nfs_datastore_health.parse(host_dir, host)
+    assert warnings != []
+    assert host.nfs_health_data_available is False

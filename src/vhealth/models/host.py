@@ -139,6 +139,27 @@ class MobilityNetworkCheck(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
+class NfsDatastoreHealth(BaseModel):
+    """One NFS datastore mount's state, from ESXi's own built-in healthd
+
+    check (``vmw.nfsDatastoreHealth``, rotated JSON snapshots under
+    ``var/lib/vmware/osdata/healthd/``). ``is_accessible``/``is_mounted``
+    are healthd's own verdict, not something vhealth infers; a host with
+    no NFS datastores configured at all reports an empty list here
+    (nothing to assess), which is distinct from one configured but
+    currently inaccessible/unmounted.
+    """
+
+    volume_name: str
+    remote_share_name: str | None = None
+    remote_hosts: list[str] = Field(default_factory=list)
+    version: str | None = None
+    is_accessible: bool = True
+    is_mounted: bool = True
+    is_read_only: bool = False
+    inaccessible_reason: str | None = None
+
+
 COVERAGE_CATEGORIES = (
     "readme",
     "system_version",
@@ -209,6 +230,13 @@ class HostInfo(BaseModel):
     memory_reservation_state: str | None = None
     memory_corrected_errors_since_boot: int | None = None
     memory_uncorrected_errors_since_boot: int | None = None
+    # ESXi's own built-in NFS-datastore-health verdict (healthd's
+    # vmw.nfsDatastoreHealth check). An empty nfs_datastores list with
+    # nfs_health_data_available True means no NFS datastore is configured
+    # at all on this host -- distinct from one configured but reported
+    # not accessible/mounted.
+    nfs_health_data_available: bool = False
+    nfs_datastores: list[NfsDatastoreHealth] = Field(default_factory=list)
     # Storage multipath state (esxcli storage nmp path list), aggregated
     # per device from every path block that names it.
     multipath_data_available: bool = False
