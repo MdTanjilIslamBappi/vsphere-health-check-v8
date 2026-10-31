@@ -14,7 +14,8 @@ rule.
 Each rule is also assigned a **category** (`src/vhealth/reporting/summary.py:_CATEGORY_BY_RULE_ID`),
 used to group the Recommendation section of the report by subsystem rather
 than as one flat list: `Storage`, `Hardware / SEL`, `CPU`, `Network`,
-`Memory`, or `Other`. See "Adding a rule" below for how to add a new one.
+`Memory`, `vCenter`, or `Other`. See "Adding a rule" below for how to
+add a new one.
 
 | Rule ID | Category | Title | Severity | Evidence required | Limitations |
 |---|---|---|---|---|---|
@@ -55,6 +56,9 @@ than as one flat list: `Storage`, `Hardware / SEL`, `CPU`, `Network`,
 | `hardware.core_service_not_running` | Other | A core ESXi management service is not running | Critical | `core_service_pids` (from healthd's `vmw.coreServicesStatus` check, not something vhealth infers) | Point-in-time snapshot from whichever rotated healthd snapshot has the most recent timestamp in the bundle. `vsanmgmtd` is only ever flagged when `vsan_cluster_enabled` (from `vmw.vSANStatus`) is `True` for that host -- see "vSAN caveat" below. Not yet observed firing against real-world data (see below). |
 | `hardware.hostd_unresponsive` | Other | hostd is not responding to ESXi's own health probe | Critical | `hostd_responsive` (from healthd's `hostd-health` check, not something vhealth infers) | Point-in-time snapshot from whichever rotated healthd snapshot has the most recent timestamp in the bundle; distinct from `hardware.core_service_not_running`'s PID-based check -- a hung hostd can hold a live PID while failing to respond to probes. Not yet observed firing against real-world data (see below). |
 | `network.vpxa_connectivity_degraded` | vCenter | vpxa reports a degraded connection to vCenter | High | `vpxa_responsive`/`vpxa_connected_to_hostd`/`vpxa_config_status` (from healthd's `vmw.vpxaStatus` check, not something vhealth infers) | Point-in-time snapshot from whichever rotated healthd snapshot has the most recent timestamp in the bundle; only evaluated when the host reports `managed_by_VC=true`. Not yet observed firing against real-world data (see below). |
+| `vcenter.core_service_stopped` (**vCenter rule** -- runs once per assessment against the vCenter appliance bundle, not per ESXi host) | vCenter | Core vCenter Server service is stopped | High | `services_stopped` (from `service-control --status --all`), checked against a fixed list of core services (`vpxd`, `vmware-vpostgres`, `vmdird`, `vmcad`, `lookupsvc`, ...) | Capture-time snapshot only; a stopped service can be expected during a scheduled maintenance window, so confirm against change records. |
+| `vcenter.optional_service_stopped` (**vCenter rule**) | vCenter | Non-core vCenter service(s) reported stopped | Info | `services_stopped`, for any service not on the core list above | Snapshot at capture time only; stopped optional/feature-dependent services (vCHA, Auto Deploy, Image Builder, ...) are often intentional, so this is informational, not a warning. **Fired against real data**: see below. |
+| `vcenter.appliance_disk_usage` (**vCenter rule**) | vCenter | vCenter appliance filesystem usage is high | Medium (90%+) / High (95%+) | `appliance_disks[].percent_used` (from `df.txt`, `/storage/*` and `/` mounts only) | Single capture-time reading; cannot distinguish a slow trend from a transient spike. Thresholds (90%=medium, 95%=high) are vhealth's own choice, not VMware-documented. **Fired against real data on first try**: see below. |
 
 ## Validation status
 
@@ -308,6 +312,21 @@ context (the "vSAN Cluster Membership" component row, status
 "Informational") and as the input the core-services exclusion above
 depends on.
 
+`vcenter.appliance_disk_usage` and `vcenter.optional_service_stopped`
+both fired against real data on first try, against the real vCenter
+Server appliance bundle (`vc-support`, 8.0.3) paired with the EAMSC2
+ESXi bundle: `/storage/archive` (the vCenter event/task database
+archive partition) was reported at **95% used** (88.1 GiB of 97.9 GiB)
+in `df.txt`, crossing this rule's own High threshold -- a genuine,
+previously-unreported capacity problem, not synthetic. Separately,
+`service-control --status --all` reported 6 non-core services stopped
+(`vmcam`, `vmonapi`, `vmware-imagebuilder`, `vmware-netdumper`,
+`vmware-rbd-watchdog`, `vmware-vcha`), all optional/feature-dependent
+services correctly classified as informational rather than a warning.
+`vcenter.core_service_stopped`'s non-firing path is also
+real-data-confirmed: none of the fixed core-service list was reported
+stopped on this appliance.
+
 ## Adding a rule
 
 A new rule must, in the same change:
@@ -323,7 +342,7 @@ A new rule must, in the same change:
 3. Add a row to this table, including its category. Add an entry to
    `_CATEGORY_BY_RULE_ID` in `src/vhealth/reporting/summary.py` -- pick
    an existing category (`Storage`, `Hardware / SEL`, `CPU`, `Network`,
-   `Memory`, `Other`) or add a new one in both places.
+   `Memory`, `vCenter`, `Other`) or add a new one in both places.
 4. Add at least one unit test in `tests/unit/test_rules.py` using the
    synthetic fixture builder in `tests/fixtures/synthetic_bundle.py` (add
    a new parameter there if the existing fixture can't express the
