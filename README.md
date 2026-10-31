@@ -147,12 +147,20 @@ aggregate hardware-status grid, 3.2 a VMware-components status table plus
 "Key Findings at a Glance", 3.3 an ESXi host inventory table (server
 model/CPU model/management IP) plus "Detailed Observations", and 3.4
 grouped Recommendations. Each 3.4 group names its category (Storage,
-Network, Hardware / SEL, CPU, Memory, or Other -- see RULE_CATALOG.md), which hosts/objects
-are affected, why the finding matters, specifically where to check it
-(the host-side log/file and, where relevant, which external system to
-correlate it with), and a short evidence table of the matching lines. See
-RULE_CATALOG.md and SUPPORTED_FORMATS.md for exactly what backs each
-section.
+Network, Hardware / SEL, CPU, Memory, vCenter, or Other -- see
+RULE_CATALOG.md), which hosts/objects are affected, why the finding
+matters, specifically where to check it (the host-side log/file and,
+where relevant, which external system to correlate it with), and a
+short evidence table of the matching lines. See RULE_CATALOG.md and
+SUPPORTED_FORMATS.md for exactly what backs each section.
+
+When the bundle includes a vCenter Server appliance capture
+(`vc-support`), its own "vCenter Server" status row additionally
+covers `service-control` service status, appliance filesystem usage,
+and vsphere.local SSO/STS certificate expiry -- distinct from the
+vCenter-*database* content (EVC baseline, datastores, VM inventory,
+alarms) that stays explicitly "not assessed" in the Scope section,
+since no support bundle exports that database.
 
 Every `assess`/`report` run that generates `docx` or `html` also writes a
 companion `findings-log.docx`/`findings-log.html` with the full
@@ -175,15 +183,19 @@ own wording), so a reader never has to guess what period was covered.
    (zip-slip protection, size/entry/compression-ratio caps). See
    [`src/vhealth/security/extraction_guard.py`](src/vhealth/security/extraction_guard.py).
 2. **Discovery** — individual ESXi `vm-support` host bundles are located
-   inside the extracted tree (a vCenter bundle contains one per host).
+   inside the extracted tree (a vCenter bundle contains one per host),
+   along with the vCenter Server appliance's own `vc-support` member,
+   if present.
 3. **Parsing** — a set of parsers read specific command-output files
    (`localcli ... --json`, `smartinfo.txt`, IPMI sensor dumps, rotated
-   `vmkwarning`/`vobd` logs) into typed models. See
-   [RULE_CATALOG.md](RULE_CATALOG.md) and
+   `vmkwarning`/`vobd` logs, ESXi's own `healthd` self-checks, and, for
+   the vCenter appliance member, `service-control`/`df`/certificate
+   data) into typed models. See [RULE_CATALOG.md](RULE_CATALOG.md) and
    [SUPPORTED_FORMATS.md](SUPPORTED_FORMATS.md).
-4. **Rules** — each rule inspects the parsed data for one host and emits
-   zero or more findings with a severity, evidence, remediation and
-   documented limitations.
+4. **Rules** — each rule inspects the parsed data for one host (or, for
+   a few vCenter-appliance-level rules, the vCenter bundle itself) and
+   emits zero or more findings with a severity, evidence, remediation
+   and documented limitations.
 5. **Reporting** — the findings and inventory are rendered into an HTML
    report (Jinja2) and a Word report (python-docx).
 

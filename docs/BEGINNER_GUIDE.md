@@ -13,7 +13,8 @@ no VM data and no credentials.
 
 `vhealth` reads that file on your own computer and writes back a report
 (a webpage and/or a Word document) pointing out things worth checking —
-failing disks, flaky storage paths, hardware sensor alarms, etc.
+failing disks, flaky storage paths, hardware sensor alarms, a vCenter
+appliance disk nearing full, an SSO certificate about to expire, etc.
 
 Important things it does **not** do:
 
@@ -246,10 +247,14 @@ Start with `report.html` (or `.docx`) — it's the concise executive read:
 
 - **Section 2, Scope of Health Check**: a single checklist of what was
   reviewed. A few items are listed as "not assessed" — EVC mode,
-  datastores, VM inventory, vCenter-level alarms — because those require
-  a live vCenter connection or a vCenter-side export, which vhealth never
-  performs. They're listed explicitly rather than silently skipped, so
-  you know to check them another way if they matter for your review.
+  datastores, VM inventory, vCenter-level alarms — because those live
+  only in vCenter's own inventory *database*, which no support bundle
+  (host or vCenter) exports. They're listed explicitly rather than
+  silently skipped, so you know to check them another way if they
+  matter for your review. If your bundle includes a vCenter Server
+  appliance capture, its own "vCenter Server" status row still covers
+  service status, appliance disk usage, and SSO certificate expiry —
+  those just aren't the database content above.
 - **Section 3.2/3.3**: "Key Findings at a Glance" and "Detailed
   Observations" are the fastest way to see what matters without reading
   every finding.
@@ -271,6 +276,9 @@ A few VMware terms you may see in findings:
 | **ALUA** | A storage multipathing feature; repeated path-state-change warnings can indicate flaky connectivity rather than a one-off blip. |
 | **SMART** | Self-reported disk health data. "Not OK" or reallocated-sector counts are early failure warnings. |
 | **IPMI sensor** | A hardware health sensor built into the physical server (temperature, fan, power supply, etc.), independent of ESXi itself. |
+| **PSOD** (Purple Screen Of Death) | ESXi's equivalent of a fatal crash -- the host halts and shows a purple diagnostic screen. A recorded PSOD in the host's recent history is a strong signal of instability. |
+| **vSAN** | VMware's software-defined storage, pooling local disks across a cluster. If it's disabled on your hosts (common outside vSAN deployments), related checks are correctly skipped rather than flagged. |
+| **SSO / STS certificate** | The certificate vCenter's Single Sign-On service uses to sign login tokens. If it expires, nobody can log in to that vCenter until it's renewed. |
 
 ## 9. If something goes wrong
 
