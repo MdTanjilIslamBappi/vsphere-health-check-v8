@@ -250,6 +250,86 @@ def test_run_assessment_flags_inaccessible_nfs_datastore(tmp_path):
     assert "storage.nfs_datastore_inaccessible" in rule_ids
 
 
+def test_run_assessment_flags_non_operational_ssd_device(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz",
+        ssd_devices=[{"device": "t10.NVMe____Synth", "device_state_enum": 1}],
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "storage.ssd_device_not_operational" in rule_ids
+
+
+def test_run_assessment_flags_recent_psod(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz", psod_count_7_days=1, psod_count_15_days=1
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "hardware.psod_detected" in rule_ids
+
+
+def test_run_assessment_flags_core_service_not_running(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz",
+        core_service_pids={
+            "healthd": 100,
+            "hostd": 0,
+            "hostd-probe": 300,
+            "vpxa": 400,
+            "vsanmgmtd": 0,
+        },
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "hardware.core_service_not_running" in rule_ids
+
+
+def test_run_assessment_does_not_flag_vsanmgmtd_when_vsan_disabled(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz",
+        core_service_pids={
+            "healthd": 100,
+            "hostd": 200,
+            "hostd-probe": 300,
+            "vpxa": 400,
+            "vsanmgmtd": 0,
+        },
+        vsan_cluster_enabled=False,
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "hardware.core_service_not_running" not in rule_ids
+
+
+def test_run_assessment_flags_hostd_unresponsive(tmp_path):
+    bundle_path = build_tgz(tmp_path / "host.tgz", hostd_responsive=False)
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "hardware.hostd_unresponsive" in rule_ids
+
+
+def test_run_assessment_flags_vpxa_connectivity_degraded(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz", vpxa_managed_by_vc=True, vpxa_responsive=False
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "network.vpxa_connectivity_degraded" in rule_ids
+
+
 def test_run_assessment_honours_configured_log_window_weeks(tmp_path):
     import dataclasses
 

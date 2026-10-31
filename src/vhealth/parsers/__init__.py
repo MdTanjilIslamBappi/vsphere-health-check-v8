@@ -9,9 +9,11 @@ the rest of the assessment can proceed.
 
 from vhealth.parsers import (
     configstore,
+    core_services_status,
     coredump,
     datastore,
     hardware_inventory,
+    hostd_health,
     ipmi_sel,
     memory_health,
     mobility,
@@ -20,14 +22,18 @@ from vhealth.parsers import (
     nic_link,
     ntp,
     pending_reboot,
+    psod_count,
     readme,
     sensors,
     smart,
+    ssd_storage_health,
     storage_core,
     system_version,
     vib,
     vm_inventory,
     vmk_log,
+    vpxa_status,
+    vsan_status,
     vswitch,
 )
 
@@ -53,6 +59,12 @@ PARSER_MODULES = [
     pending_reboot,
     memory_health,
     nfs_datastore_health,
+    ssd_storage_health,
+    psod_count,
+    core_services_status,
+    hostd_health,
+    vpxa_status,
+    vsan_status,
 ]
 
 PARSER_VERSIONS = {m.__name__.rsplit(".", 1)[-1]: m.VERSION for m in PARSER_MODULES}

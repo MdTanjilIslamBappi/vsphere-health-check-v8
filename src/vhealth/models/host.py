@@ -160,6 +160,23 @@ class NfsDatastoreHealth(BaseModel):
     inaccessible_reason: str | None = None
 
 
+class SsdStorageDevice(BaseModel):
+    """One SSD/NVMe device's operational state, from ESXi's own built-in
+
+    healthd check (``vmw.ssdStorageHealth``). ``device_state_enum`` is
+    healthd's own numeric state code (observed value: ``0`` for "The
+    device is operational"); any other value has not been observed in
+    real data, so this parser records it as-is without assuming a
+    specific meaning beyond "not the known-good 0".
+    """
+
+    device: str
+    model: str | None = None
+    vendor: str | None = None
+    device_state: str | None = None
+    device_state_enum: int | None = None
+
+
 COVERAGE_CATEGORIES = (
     "readme",
     "system_version",
@@ -237,6 +254,44 @@ class HostInfo(BaseModel):
     # not accessible/mounted.
     nfs_health_data_available: bool = False
     nfs_datastores: list[NfsDatastoreHealth] = Field(default_factory=list)
+    # ESXi's own built-in per-SSD/NVMe-device operational check (healthd's
+    # vmw.ssdStorageHealth). An empty list with ssd_health_data_available
+    # True means no SSD/NVMe device is tracked by this check on this host.
+    ssd_health_data_available: bool = False
+    ssd_devices: list[SsdStorageDevice] = Field(default_factory=list)
+    # ESXi's own built-in PSOD (purple-screen crash) history count
+    # (healthd's vmw.PSODCount) over the trailing 7/15 days from capture.
+    psod_data_available: bool = False
+    psod_count_7_days: int | None = None
+    psod_count_15_days: int | None = None
+    # ESXi's own built-in core-service-running check (healthd's
+    # vmw.coreServicesStatus): PID per tracked service name, 0 meaning
+    # "not running". ``vsanmgmtd`` legitimately shows 0 whenever vSAN is
+    # disabled on this host (see vsan_cluster_enabled below), so rules
+    # reading this must only treat vsanmgmtd==0 as a problem when vSAN is
+    # actually enabled here.
+    core_services_data_available: bool = False
+    core_service_pids: dict[str, int] = Field(default_factory=dict)
+    # ESXi's own built-in hostd responsiveness check (healthd's
+    # hostd-health) -- distinct from core_service_pids["hostd"]: a hung
+    # hostd can still hold a live PID while failing to respond to probes.
+    hostd_health_data_available: bool = False
+    hostd_responsive: bool | None = None
+    # ESXi's own built-in vpxa<->hostd<->vCenter connectivity/heartbeat
+    # check (healthd's vmw.vpxaStatus) -- the host's own view of whether
+    # its management connection to vCenter is actually working, not just
+    # whether it is configured to be managed.
+    vpxa_status_data_available: bool = False
+    vpxa_responsive: bool | None = None
+    vpxa_connected_to_hostd: bool | None = None
+    vpxa_managed_by_vc: bool | None = None
+    vpxa_config_status: str | None = None
+    # ESXi's own built-in vSAN cluster membership flag (healthd's
+    # vmw.vSANStatus). Purely descriptive -- neither True nor False is a
+    # problem by itself -- but used by core-service rules to know when
+    # vsanmgmtd==0 is expected (vSAN disabled) rather than a real failure.
+    vsan_status_data_available: bool = False
+    vsan_cluster_enabled: bool | None = None
     # Storage multipath state (esxcli storage nmp path list), aggregated
     # per device from every path block that names it.
     multipath_data_available: bool = False

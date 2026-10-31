@@ -5,6 +5,7 @@ from vhealth.models.host import (
     HostInfo,
     NetworkSwitch,
     NfsDatastoreHealth,
+    SsdStorageDevice,
     VirtualMachine,
 )
 from vhealth.reporting import summary
@@ -39,6 +40,12 @@ def test_component_status_rows_marks_unassessed_vcenter_sections():
     assert rows["Pending Reboot (Image Profile)"].status == summary.NOT_ASSESSED
     assert rows["Memory Health"].status == summary.NOT_ASSESSED
     assert rows["NFS Datastore Health"].status == summary.NOT_ASSESSED
+    assert rows["SSD/NVMe Device Health"].status == summary.NOT_ASSESSED
+    assert rows["PSOD History"].status == summary.NOT_ASSESSED
+    assert rows["vSAN Cluster Membership"].status == summary.NOT_ASSESSED
+    assert rows["Core Services Status"].status == summary.NOT_ASSESSED
+    assert rows["hostd Responsiveness"].status == summary.NOT_ASSESSED
+    assert rows["vpxa Connectivity"].status == summary.NOT_ASSESSED
 
 
 def test_component_status_rows_reports_real_datastore_and_vm_data_when_present():
@@ -373,6 +380,201 @@ def test_component_status_rows_reports_nfs_healthy_when_no_datastores():
     assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
     rows = {row.component: row for row in summary.component_status_rows(assessment)}
     assert rows["NFS Datastore Health"].status == "Healthy"
+
+
+def test_component_status_rows_reports_ssd_device_not_operational():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        ssd_health_data_available=True,
+        ssd_devices=[SsdStorageDevice(device="t10.NVMe____Synth", device_state_enum=1)],
+    )
+    finding = Finding(
+        rule_id="storage.ssd_device_not_operational",
+        title="SSD/NVMe device reports a non-operational state",
+        severity=Severity.HIGH,
+        summary="...",
+        affected_host="h1",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["SSD/NVMe Device Health"].status == "Attention Needed"
+    assert summary.category_for_rule_id("storage.ssd_device_not_operational") == "Storage"
+
+
+def test_component_status_rows_reports_ssd_healthy_when_no_devices():
+    host = HostInfo(
+        hostname="h1", bundle_source="h1", ssd_health_data_available=True, ssd_devices=[]
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["SSD/NVMe Device Health"].status == "Healthy"
+
+
+def test_component_status_rows_reports_psod_detected():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        psod_data_available=True,
+        psod_count_7_days=1,
+        psod_count_15_days=1,
+    )
+    finding = Finding(
+        rule_id="hardware.psod_detected",
+        title="Host has a recorded PSOD (purple-screen crash) in its recent history",
+        severity=Severity.CRITICAL,
+        summary="...",
+        affected_host="h1",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["PSOD History"].status == "Attention Needed"
+    assert summary.category_for_rule_id("hardware.psod_detected") == "Other"
+
+
+def test_component_status_rows_reports_psod_healthy_when_zero():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        psod_data_available=True,
+        psod_count_7_days=0,
+        psod_count_15_days=0,
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["PSOD History"].status == "Healthy"
+
+
+def test_component_status_rows_reports_vsan_disabled_as_informational():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        vsan_status_data_available=True,
+        vsan_cluster_enabled=False,
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    vsan_row = rows["vSAN Cluster Membership"]
+    assert vsan_row.status == "Informational"
+    assert "disabled" in vsan_row.remarks.lower()
+
+
+def test_component_status_rows_reports_vsan_enabled_as_informational():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        vsan_status_data_available=True,
+        vsan_cluster_enabled=True,
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    vsan_row = rows["vSAN Cluster Membership"]
+    assert vsan_row.status == "Informational"
+    assert "h1" in vsan_row.remarks
+
+
+def test_component_status_rows_reports_core_service_not_running():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        core_services_data_available=True,
+        core_service_pids={"healthd": 1, "hostd": 0, "hostd-probe": 1, "vpxa": 1},
+    )
+    finding = Finding(
+        rule_id="hardware.core_service_not_running",
+        title="A core ESXi management service is not running",
+        severity=Severity.CRITICAL,
+        summary="...",
+        affected_host="h1",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["Core Services Status"].status == "Attention Needed"
+    assert summary.category_for_rule_id("hardware.core_service_not_running") == "Other"
+
+
+def test_component_status_rows_core_services_mentions_vsan_exclusion_when_disabled():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        core_services_data_available=True,
+        core_service_pids={
+            "healthd": 1,
+            "hostd": 1,
+            "hostd-probe": 1,
+            "vpxa": 1,
+            "vsanmgmtd": 0,
+        },
+        vsan_cluster_enabled=False,
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    core_row = rows["Core Services Status"]
+    assert core_row.status == "Healthy"
+    assert "vsanmgmtd" in core_row.remarks
+    assert "disabled" in core_row.remarks.lower()
+
+
+def test_component_status_rows_reports_hostd_unresponsive():
+    host = HostInfo(
+        hostname="h1", bundle_source="h1", hostd_health_data_available=True, hostd_responsive=False
+    )
+    finding = Finding(
+        rule_id="hardware.hostd_unresponsive",
+        title="hostd is not responding to ESXi's own health probe",
+        severity=Severity.CRITICAL,
+        summary="...",
+        affected_host="h1",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["hostd Responsiveness"].status == "Attention Needed"
+    assert summary.category_for_rule_id("hardware.hostd_unresponsive") == "Other"
+
+
+def test_component_status_rows_reports_hostd_responsive_as_healthy():
+    host = HostInfo(
+        hostname="h1", bundle_source="h1", hostd_health_data_available=True, hostd_responsive=True
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["hostd Responsiveness"].status == "Healthy"
+
+
+def test_component_status_rows_reports_vpxa_connectivity_degraded():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        vpxa_status_data_available=True,
+        vpxa_managed_by_vc=True,
+        vpxa_responsive=False,
+    )
+    finding = Finding(
+        rule_id="network.vpxa_connectivity_degraded",
+        title="vpxa reports a degraded connection to vCenter",
+        severity=Severity.HIGH,
+        summary="...",
+        affected_host="h1",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["vpxa Connectivity"].status == "Attention Needed"
+    assert summary.category_for_rule_id("network.vpxa_connectivity_degraded") == "vCenter"
+
+
+def test_component_status_rows_reports_vpxa_healthy_when_responsive():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        vpxa_status_data_available=True,
+        vpxa_managed_by_vc=True,
+        vpxa_responsive=True,
+        vpxa_connected_to_hostd=True,
+        vpxa_config_status="green",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["vpxa Connectivity"].status == "Healthy"
 
 
 def test_component_status_rows_reports_vswitch_single_uplink():

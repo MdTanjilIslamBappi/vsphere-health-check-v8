@@ -360,6 +360,53 @@ and the "Known limitations" section of [README.md](README.md)).
   storage-connectivity problem on that one host, surfaced directly by
   ESXi's own tooling. Both the firing path (this host) and the healthy
   path (every other host) are real-data-validated.
+- Six more ESXi healthd self-checks, rounding out every remaining
+  rotated-JSON-snapshot check found under
+  `var/lib/vmware/osdata/healthd/` on the real EAMSC2 bundle:
+  - `storage.ssd_device_not_operational` (`ssd_storage_health.py`):
+    per-SSD/NVMe-device operational state (`vmw.ssdStorageHealth`).
+  - `hardware.psod_detected` (`psod_count.py`): trailing 7/15-day PSOD
+    (purple-screen crash) count (`vmw.PSODCount`); severity Critical
+    within 7 days, High within 15.
+  - `hardware.core_service_not_running` (`core_services_status.py`):
+    whether `healthd`/`hostd`/`hostd-probe`/`vpxa` have a live PID
+    (`vmw.coreServicesStatus`).
+  - `hardware.hostd_unresponsive` (`hostd_health.py`): hostd's own
+    responsiveness self-check (`hostd-health`) -- distinct from the
+    PID-based check above, since a hung hostd can hold a live PID
+    while failing to respond to probes.
+  - `network.vpxa_connectivity_degraded` (`vpxa_status.py`): the
+    host's own view of its vpxa-hostd-vCenter connectivity/heartbeat
+    (`vmw.vpxaStatus`), only evaluated when `managed_by_VC=true`.
+  - `vsan_status.py` (`vmw.vSANStatus`): vSAN cluster-membership flag.
+    No dedicated rule -- "enabled" and "disabled" are each a valid,
+    non-problematic state by themselves, so this is parsed only as
+    descriptive context (new "vSAN Cluster Membership" component row,
+    status "Informational") and as the input the next item depends on.
+
+  **vSAN caveat.** On the real EAMSC2 bundle, `vmw.coreServicesStatus`'s
+  `vsanmgmtd` PID is `0` on most hosts, and every host's
+  `vmw.vSANStatus` confirms vSAN is simply disabled cluster-wide -- not
+  a service failure. A naive "any tracked service PID is 0" rule would
+  have produced a false-positive storm on nearly every host.
+  `hardware.core_service_not_running` therefore only flags
+  `vsanmgmtd == 0` when that host's `vsan_cluster_enabled` is `True`;
+  when `False`/unknown, `vsanmgmtd` is silently excluded (never
+  flagged), and the report's "Core Services Status" and "vSAN Cluster
+  Membership" component rows say so explicitly even when nothing
+  fires, so a reader is never left wondering why it was excluded.
+
+  New component rows: "SSD/NVMe Device Health", "PSOD History", "vSAN
+  Cluster Membership", "Core Services Status", "hostd Responsiveness",
+  "vpxa Connectivity" -- plus matching scope items. Validated against
+  the real 10-host EAMSC2 bundle: every host is clean across all six
+  checks (2 of 10 hosts have a tracked Dell BOSS-N1 NVMe boot device,
+  both operational; zero PSODs anywhere; every core service PID
+  non-zero; every hostd responsive; every vpxa connection green), so
+  every non-firing path is real-data-confirmed and the full
+  assessment's finding count is unchanged (65) -- zero regressions.
+  Every firing path is covered by a synthetic unit test only, stated
+  explicitly in RULE_CATALOG.md.
 
 ### Fixed
 

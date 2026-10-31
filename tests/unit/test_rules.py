@@ -523,6 +523,154 @@ def test_no_nfs_datastores_raises_no_finding(tmp_path):
     assert "storage.nfs_datastore_inaccessible" not in rule_ids
 
 
+def test_ssd_device_not_operational_raises_high_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path,
+        ssd_devices=[
+            {
+                "device": "t10.NVMe____Synth",
+                "model": "Synth-NVMe",
+                "vendor": "SYN",
+                "device_state": "The device has failed",
+                "device_state_enum": 1,
+            }
+        ],
+    )
+    findings = evaluate_all([host])
+    ssd = [f for f in findings if f.rule_id == "storage.ssd_device_not_operational"]
+    assert len(ssd) == 1
+    assert ssd[0].severity.value == "high"
+    assert ssd[0].affected_object == "t10.NVMe____Synth"
+
+
+def test_ssd_device_operational_raises_no_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path,
+        ssd_devices=[{"device": "t10.NVMe____Synth", "device_state_enum": 0}],
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "storage.ssd_device_not_operational" not in rule_ids
+
+
+def test_psod_within_7_days_raises_critical_finding(tmp_path):
+    host = _assessed_host(tmp_path, psod_count_7_days=1, psod_count_15_days=1)
+    findings = evaluate_all([host])
+    psod = [f for f in findings if f.rule_id == "hardware.psod_detected"]
+    assert len(psod) == 1
+    assert psod[0].severity.value == "critical"
+
+
+def test_psod_only_within_15_days_raises_high_finding(tmp_path):
+    host = _assessed_host(tmp_path, psod_count_7_days=0, psod_count_15_days=1)
+    findings = evaluate_all([host])
+    psod = [f for f in findings if f.rule_id == "hardware.psod_detected"]
+    assert len(psod) == 1
+    assert psod[0].severity.value == "high"
+
+
+def test_no_psod_raises_no_finding(tmp_path):
+    host = _assessed_host(tmp_path, psod_count_7_days=0, psod_count_15_days=0)
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "hardware.psod_detected" not in rule_ids
+
+
+def test_core_service_not_running_raises_critical_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path,
+        core_service_pids={
+            "healthd": 100,
+            "hostd": 0,
+            "hostd-probe": 300,
+            "vpxa": 400,
+            "vsanmgmtd": 0,
+        },
+    )
+    findings = evaluate_all([host])
+    core = [f for f in findings if f.rule_id == "hardware.core_service_not_running"]
+    assert len(core) == 1
+    assert core[0].severity.value == "critical"
+    assert "hostd" in core[0].affected_object
+    assert "vsanmgmtd" not in core[0].affected_object
+
+
+def test_core_service_not_running_flags_vsanmgmtd_only_when_vsan_enabled(tmp_path):
+    host = _assessed_host(
+        tmp_path,
+        core_service_pids={
+            "healthd": 100,
+            "hostd": 200,
+            "hostd-probe": 300,
+            "vpxa": 400,
+            "vsanmgmtd": 0,
+        },
+        vsan_cluster_enabled=True,
+    )
+    findings = evaluate_all([host])
+    core = [f for f in findings if f.rule_id == "hardware.core_service_not_running"]
+    assert len(core) == 1
+    assert core[0].affected_object == "vsanmgmtd"
+
+
+def test_core_service_vsanmgmtd_zero_with_vsan_disabled_raises_no_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path,
+        core_service_pids={
+            "healthd": 100,
+            "hostd": 200,
+            "hostd-probe": 300,
+            "vpxa": 400,
+            "vsanmgmtd": 0,
+        },
+        vsan_cluster_enabled=False,
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "hardware.core_service_not_running" not in rule_ids
+
+
+def test_hostd_unresponsive_raises_critical_finding(tmp_path):
+    host = _assessed_host(tmp_path, hostd_responsive=False)
+    findings = evaluate_all([host])
+    hostd = [f for f in findings if f.rule_id == "hardware.hostd_unresponsive"]
+    assert len(hostd) == 1
+    assert hostd[0].severity.value == "critical"
+
+
+def test_hostd_responsive_raises_no_finding(tmp_path):
+    host = _assessed_host(tmp_path, hostd_responsive=True)
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "hardware.hostd_unresponsive" not in rule_ids
+
+
+def test_vpxa_connectivity_degraded_raises_high_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path, vpxa_managed_by_vc=True, vpxa_responsive=False
+    )
+    findings = evaluate_all([host])
+    vpxa = [f for f in findings if f.rule_id == "network.vpxa_connectivity_degraded"]
+    assert len(vpxa) == 1
+    assert vpxa[0].severity.value == "high"
+
+
+def test_vpxa_not_managed_by_vc_raises_no_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path, vpxa_managed_by_vc=False, vpxa_responsive=False
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "network.vpxa_connectivity_degraded" not in rule_ids
+
+
+def test_vpxa_healthy_raises_no_finding(tmp_path):
+    host = _assessed_host(tmp_path, vpxa_managed_by_vc=True, vpxa_responsive=True)
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "network.vpxa_connectivity_degraded" not in rule_ids
+
+
 def test_log_window_weeks_controls_whether_sel_finding_fires(tmp_path):
     """An event 10 days before capture (within a 2-week window, outside a
 

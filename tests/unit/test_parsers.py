@@ -5,9 +5,11 @@ from synthetic_bundle import build_host_dir
 from vhealth.models.host import HostInfo
 from vhealth.parsers import (
     configstore,
+    core_services_status,
     coredump,
     datastore,
     hardware_inventory,
+    hostd_health,
     ipmi_sel,
     memory_health,
     mobility,
@@ -16,14 +18,18 @@ from vhealth.parsers import (
     nic_link,
     ntp,
     pending_reboot,
+    psod_count,
     readme,
     sensors,
     smart,
+    ssd_storage_health,
     storage_core,
     system_version,
     vib,
     vm_inventory,
     vmk_log,
+    vpxa_status,
+    vsan_status,
     vswitch,
 )
 
@@ -641,3 +647,154 @@ def test_nfs_datastore_health_parser_reports_warning_when_data_missing(tmp_path)
     warnings = nfs_datastore_health.parse(host_dir, host)
     assert warnings != []
     assert host.nfs_health_data_available is False
+
+
+def test_ssd_storage_health_parser_reports_operational_device(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path,
+        ssd_devices=[
+            {
+                "device": "t10.NVMe____Synth",
+                "model": "Synth-NVMe",
+                "vendor": "SYN",
+                "device_state": "The device is operational",
+                "device_state_enum": 0,
+            }
+        ],
+    )
+    warnings = ssd_storage_health.parse(host_dir, host)
+    assert warnings == []
+    assert host.ssd_health_data_available is True
+    assert len(host.ssd_devices) == 1
+    assert host.ssd_devices[0].device_state_enum == 0
+
+
+def test_ssd_storage_health_parser_reports_no_devices(tmp_path):
+    host_dir, host = _build_host(tmp_path, ssd_devices=[])
+    warnings = ssd_storage_health.parse(host_dir, host)
+    assert warnings == []
+    assert host.ssd_health_data_available is True
+    assert host.ssd_devices == []
+
+
+def test_ssd_storage_health_parser_reports_warning_when_data_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = ssd_storage_health.parse(host_dir, host)
+    assert warnings != []
+    assert host.ssd_health_data_available is False
+
+
+def test_psod_count_parser_reports_counts(tmp_path):
+    host_dir, host = _build_host(tmp_path, psod_count_7_days=1, psod_count_15_days=3)
+    warnings = psod_count.parse(host_dir, host)
+    assert warnings == []
+    assert host.psod_data_available is True
+    assert host.psod_count_7_days == 1
+    assert host.psod_count_15_days == 3
+
+
+def test_psod_count_parser_reports_warning_when_data_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = psod_count.parse(host_dir, host)
+    assert warnings != []
+    assert host.psod_data_available is False
+
+
+def test_core_services_status_parser_reports_pids(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path,
+        core_service_pids={
+            "healthd": 100,
+            "hostd": 200,
+            "hostd-probe": 300,
+            "vpxa": 400,
+            "vsanmgmtd": 0,
+        },
+    )
+    warnings = core_services_status.parse(host_dir, host)
+    assert warnings == []
+    assert host.core_services_data_available is True
+    assert host.core_service_pids == {
+        "healthd": 100,
+        "hostd": 200,
+        "hostd-probe": 300,
+        "vpxa": 400,
+        "vsanmgmtd": 0,
+    }
+
+
+def test_core_services_status_parser_reports_warning_when_data_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = core_services_status.parse(host_dir, host)
+    assert warnings != []
+    assert host.core_services_data_available is False
+
+
+def test_hostd_health_parser_reports_responsive(tmp_path):
+    host_dir, host = _build_host(tmp_path, hostd_responsive=True)
+    warnings = hostd_health.parse(host_dir, host)
+    assert warnings == []
+    assert host.hostd_health_data_available is True
+    assert host.hostd_responsive is True
+
+
+def test_hostd_health_parser_reports_unresponsive(tmp_path):
+    host_dir, host = _build_host(tmp_path, hostd_responsive=False)
+    warnings = hostd_health.parse(host_dir, host)
+    assert warnings == []
+    assert host.hostd_health_data_available is True
+    assert host.hostd_responsive is False
+
+
+def test_hostd_health_parser_reports_warning_when_data_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = hostd_health.parse(host_dir, host)
+    assert warnings != []
+    assert host.hostd_health_data_available is False
+
+
+def test_vpxa_status_parser_reports_fields(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path,
+        vpxa_responsive=False,
+        vpxa_connected_to_hostd=True,
+        vpxa_managed_by_vc=True,
+        vpxa_config_status="red",
+    )
+    warnings = vpxa_status.parse(host_dir, host)
+    assert warnings == []
+    assert host.vpxa_status_data_available is True
+    assert host.vpxa_responsive is False
+    assert host.vpxa_connected_to_hostd is True
+    assert host.vpxa_managed_by_vc is True
+    assert host.vpxa_config_status == "red"
+
+
+def test_vpxa_status_parser_reports_warning_when_data_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = vpxa_status.parse(host_dir, host)
+    assert warnings != []
+    assert host.vpxa_status_data_available is False
+
+
+def test_vsan_status_parser_reports_enabled(tmp_path):
+    host_dir, host = _build_host(tmp_path, vsan_cluster_enabled=True)
+    warnings = vsan_status.parse(host_dir, host)
+    assert warnings == []
+    assert host.vsan_status_data_available is True
+    assert host.vsan_cluster_enabled is True
+
+
+def test_vsan_status_parser_reports_disabled(tmp_path):
+    host_dir, host = _build_host(tmp_path, vsan_cluster_enabled=False)
+    warnings = vsan_status.parse(host_dir, host)
+    assert warnings == []
+    assert host.vsan_status_data_available is True
+    assert host.vsan_cluster_enabled is False
+
+
+def test_vsan_status_parser_reports_warning_when_data_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = vsan_status.parse(host_dir, host)
+    assert warnings != []
+    assert host.vsan_status_data_available is False

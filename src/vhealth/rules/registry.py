@@ -5,9 +5,11 @@ from vhealth.models.host import HostInfo
 from vhealth.models.vcenter import VCenterInfo
 from vhealth.rules import (
     configstore_rules,
+    core_services_rules,
     coredump_rules,
     coverage_rules,
     fleet_rules,
+    hostd_health_rules,
     log_rules,
     memory_rules,
     mobility_rules,
@@ -16,15 +18,18 @@ from vhealth.rules import (
     nfs_datastore_rules,
     ntp_rules,
     pending_reboot_rules,
+    psod_rules,
     sel_rules,
     sensor_rules,
+    ssd_rules,
     storage_rules,
     vcenter_rules,
     vib_rules,
+    vpxa_rules,
 )
 from vhealth.rules.base import FleetRule, Rule
 
-RULE_ENGINE_VERSION = "1.16.0"
+RULE_ENGINE_VERSION = "1.17.0"
 
 ALL_RULES: list[Rule] = [
     *storage_rules.RULES,
@@ -42,6 +47,11 @@ ALL_RULES: list[Rule] = [
     *pending_reboot_rules.RULES,
     *memory_rules.RULES,
     *nfs_datastore_rules.RULES,
+    *ssd_rules.RULES,
+    *psod_rules.RULES,
+    *core_services_rules.RULES,
+    *hostd_health_rules.RULES,
+    *vpxa_rules.RULES,
 ]
 
 ALL_FLEET_RULES: list[FleetRule] = [

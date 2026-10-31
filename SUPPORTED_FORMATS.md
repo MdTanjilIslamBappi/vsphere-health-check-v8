@@ -67,6 +67,12 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
 | `commands/localcli_software-profile-get---rebooting-image.txt` | `pending_reboot.py` | Whether an image profile is staged but not yet applied by a reboot (vs. the literal "No pending image profile available.") |
 | `var/lib/vmware/osdata/healthd/vmw.memoryHealth-*.json` | `memory_health.py` | ESXi's own built-in memory-health verdict: physical/ECC hardware state (plus corrected/uncorrected error counts since boot) and memory-reservation admission-control state, from whichever rotated snapshot has the most recent timestamp |
 | `var/lib/vmware/osdata/healthd/vmw.nfsDatastoreHealth-*.json` | `nfs_datastore_health.py` | ESXi's own built-in per-NFS-datastore accessibility/mount verdict, from whichever rotated snapshot has the most recent timestamp; an empty list means no NFS datastore is configured on that host |
+| `var/lib/vmware/osdata/healthd/vmw.ssdStorageHealth-*.json` | `ssd_storage_health.py` | ESXi's own built-in per-SSD/NVMe-device operational verdict, from whichever rotated snapshot has the most recent timestamp; an empty list means no SSD/NVMe device is tracked by this check on that host |
+| `var/lib/vmware/osdata/healthd/vmw.PSODCount-*.json` | `psod_count.py` | ESXi's own built-in PSOD (purple-screen crash) history count over the trailing 7/15 days, from whichever rotated snapshot has the most recent timestamp |
+| `var/lib/vmware/osdata/healthd/vmw.coreServicesStatus-*.json` | `core_services_status.py` | ESXi's own built-in core-service-running check: PID per tracked service name (0 means not running), from whichever rotated snapshot has the most recent timestamp |
+| `var/lib/vmware/osdata/healthd/hostd-health-*.json` | `hostd_health.py` | ESXi's own built-in hostd-responsiveness check, from whichever rotated snapshot has the most recent timestamp |
+| `var/lib/vmware/osdata/healthd/vmw.vpxaStatus-*.json` | `vpxa_status.py` | ESXi's own built-in vpxa/hostd/vCenter connectivity-heartbeat check, from whichever rotated snapshot has the most recent timestamp |
+| `var/lib/vmware/osdata/healthd/vmw.vSANStatus-*.json` | `vsan_status.py` | ESXi's own built-in vSAN cluster membership flag, from whichever rotated snapshot has the most recent timestamp; purely descriptive, used to avoid false-positiving `core_services_status.py`'s `vsanmgmtd` check on a non-vSAN host |
 
 ## Known gaps (not yet implemented)
 

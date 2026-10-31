@@ -111,6 +111,16 @@ def build_host_dir(
     memory_corrected_errors_since_boot: int = 0,
     memory_uncorrected_errors_since_boot: int = 0,
     nfs_datastores: list[dict] | None = None,
+    ssd_devices: list[dict] | None = None,
+    psod_count_7_days: int | None = None,
+    psod_count_15_days: int | None = None,
+    core_service_pids: dict[str, int] | None = None,
+    hostd_responsive: bool | None = None,
+    vpxa_responsive: bool | None = None,
+    vpxa_connected_to_hostd: bool | None = None,
+    vpxa_managed_by_vc: bool | None = None,
+    vpxa_config_status: str | None = None,
+    vsan_cluster_enabled: bool | None = None,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -206,6 +216,41 @@ def build_host_dir(
     a valid healthy state distinct from not having run this check at
     all. Left as ``None``, no NFS-datastore-health data is written at
     all (NFS datastore health not assessed).
+
+    ``ssd_devices``, if given (including ``[]``), adds a single rotated
+    ``vmw.ssdStorageHealth`` healthd JSON snapshot whose ``unstructured``
+    list is exactly the dicts passed (e.g. ``[{"device": "t10.NVMe...",
+    "device_state": "The device is operational", "device_state_enum":
+    0, "model": "Synth-NVMe", "vendor": "SYN"}]``); left as ``None``, no
+    SSD/NVMe-health data is written at all.
+
+    ``psod_count_7_days``/``psod_count_15_days``, if either is given,
+    adds a single rotated ``vmw.PSODCount`` healthd JSON snapshot
+    reporting those counts (the other defaults to 0 if only one is
+    given); left as ``None`` for both, no PSOD-count data is written at
+    all.
+
+    ``core_service_pids``, if given (e.g. ``{"healthd": 123, "hostd": 0,
+    "hostd-probe": 456, "vpxa": 789, "vsanmgmtd": 0}``), adds a single
+    rotated ``vmw.coreServicesStatus`` healthd JSON snapshot whose
+    ``unstructured`` map is exactly the dict passed; left as ``None``,
+    no core-services data is written at all.
+
+    ``hostd_responsive``, if given (True or False), adds a single
+    rotated ``hostd-health`` healthd JSON snapshot reporting
+    ``hostd.state`` as ``"Responsive"`` (True) or ``"Unresponsive"``
+    (False); left as ``None``, no hostd-health data is written at all.
+
+    ``vpxa_responsive``/``vpxa_connected_to_hostd``/``vpxa_managed_by_vc``/
+    ``vpxa_config_status``, if any is given, adds a single rotated
+    ``vmw.vpxaStatus`` healthd JSON snapshot with those fields (unset
+    ones default to the healthy values: ``True``/``True``/``True``/
+    ``"green"``); left as ``None`` for all four, no vpxa-status data is
+    written at all.
+
+    ``vsan_cluster_enabled``, if given (True or False), adds a single
+    rotated ``vmw.vSANStatus`` healthd JSON snapshot reporting that
+    flag; left as ``None``, no vSAN-status data is written at all.
     """
     bundle_dir = root / f"esx-{hostname}-2026-01-15"
     (bundle_dir / "commands").mkdir(parents=True)
@@ -583,6 +628,121 @@ def build_host_dir(
         }
         (healthd_dir / "vmw.nfsDatastoreHealth-0.json").write_text(
             json.dumps(nfs_health_dump), encoding="utf-8"
+        )
+
+    if ssd_devices is not None:
+        healthd_dir = bundle_dir / "var" / "lib" / "vmware" / "osdata" / "healthd"
+        healthd_dir.mkdir(parents=True, exist_ok=True)
+        ssd_health_dump = {
+            "structured": {
+                "name": "vmw.ssdStorageHealth",
+                "status": 0 if ssd_devices else 3,
+                "time": "2026-01-15T10:00:00+00:00",
+            },
+            "unstructured": ssd_devices,
+        }
+        (healthd_dir / "vmw.ssdStorageHealth-0.json").write_text(
+            json.dumps(ssd_health_dump), encoding="utf-8"
+        )
+
+    if psod_count_7_days is not None or psod_count_15_days is not None:
+        healthd_dir = bundle_dir / "var" / "lib" / "vmware" / "osdata" / "healthd"
+        healthd_dir.mkdir(parents=True, exist_ok=True)
+        psod_dump = {
+            "structured": {
+                "name": "vmw.PSODCount",
+                "status": 0,
+                "time": "2026-01-15T10:00:00+00:00",
+            },
+            "unstructured": {
+                "psod_7_days_count": psod_count_7_days or 0,
+                "psod_15_days_count": psod_count_15_days or 0,
+            },
+        }
+        (healthd_dir / "vmw.PSODCount-0.json").write_text(
+            json.dumps(psod_dump), encoding="utf-8"
+        )
+
+    if core_service_pids is not None:
+        healthd_dir = bundle_dir / "var" / "lib" / "vmware" / "osdata" / "healthd"
+        healthd_dir.mkdir(parents=True, exist_ok=True)
+        core_services_dump = {
+            "structured": {
+                "name": "vmw.coreServicesStatus",
+                "status": 0 if all(pid != 0 for pid in core_service_pids.values()) else 2,
+                "time": "2026-01-15T10:00:00+00:00",
+            },
+            "unstructured": core_service_pids,
+        }
+        (healthd_dir / "vmw.coreServicesStatus-0.json").write_text(
+            json.dumps(core_services_dump), encoding="utf-8"
+        )
+
+    if hostd_responsive is not None:
+        healthd_dir = bundle_dir / "var" / "lib" / "vmware" / "osdata" / "healthd"
+        healthd_dir.mkdir(parents=True, exist_ok=True)
+        hostd_health_dump = {
+            "structured": {
+                "name": "hostd-health",
+                "status": 0 if hostd_responsive else 2,
+                "time": "2026-01-15T10:00:00+00:00",
+            },
+            "unstructured": {
+                "hostd": {
+                    "pid": 12345,
+                    "state": "Responsive" if hostd_responsive else "Unresponsive",
+                }
+            },
+        }
+        (healthd_dir / "hostd-health-0.json").write_text(
+            json.dumps(hostd_health_dump), encoding="utf-8"
+        )
+
+    if any(
+        v is not None
+        for v in (
+            vpxa_responsive,
+            vpxa_connected_to_hostd,
+            vpxa_managed_by_vc,
+            vpxa_config_status,
+        )
+    ):
+        healthd_dir = bundle_dir / "var" / "lib" / "vmware" / "osdata" / "healthd"
+        healthd_dir.mkdir(parents=True, exist_ok=True)
+        vpxa_status_dump = {
+            "structured": {
+                "name": "vmw.vpxaStatus",
+                "status": 0,
+                "time": "2026-01-15T10:00:00+00:00",
+            },
+            "unstructured": {
+                "VC_server_IP": "192.168.100.14",
+                "config_status": vpxa_config_status if vpxa_config_status is not None else "green",
+                "connected_to_hostd": (
+                    vpxa_connected_to_hostd if vpxa_connected_to_hostd is not None else True
+                ),
+                "last_heartbeat_to_VC": "2026-01-15T10:00:00.000000Z",
+                "managed_by_VC": vpxa_managed_by_vc if vpxa_managed_by_vc is not None else True,
+                "responsive": vpxa_responsive if vpxa_responsive is not None else True,
+            },
+        }
+        (healthd_dir / "vmw.vpxaStatus-0.json").write_text(
+            json.dumps(vpxa_status_dump), encoding="utf-8"
+        )
+
+    if vsan_cluster_enabled is not None:
+        healthd_dir = bundle_dir / "var" / "lib" / "vmware" / "osdata" / "healthd"
+        healthd_dir.mkdir(parents=True, exist_ok=True)
+        vsan_status_dump = {
+            "structured": {
+                "name": "vmw.vSANStatus",
+                "status": 3,
+                "time": "2026-01-15T10:00:00+00:00",
+            },
+            "unstructured": {"vSAN_cluster_enabled": vsan_cluster_enabled},
+        }
+        (healthd_dir / "vmw.vSANStatus-0.json").write_text(
+            json.dumps(vsan_status_dump), encoding="utf-8"
         )
 
     return bundle_dir

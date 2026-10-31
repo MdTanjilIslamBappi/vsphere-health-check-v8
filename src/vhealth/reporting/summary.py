@@ -53,6 +53,11 @@ _MEMORY_RULE_IDS = {
     "hardware.memory_reservation_health_degraded",
 }
 _NFS_DATASTORE_RULE_IDS = {"storage.nfs_datastore_inaccessible"}
+_SSD_RULE_IDS = {"storage.ssd_device_not_operational"}
+_PSOD_RULE_IDS = {"hardware.psod_detected"}
+_CORE_SERVICES_RULE_IDS = {"hardware.core_service_not_running"}
+_HOSTD_HEALTH_RULE_IDS = {"hardware.hostd_unresponsive"}
+_VPXA_RULE_IDS = {"network.vpxa_connectivity_degraded"}
 _MULTIPATH_RULE_IDS = {
     "storage.multipath_all_paths_dead",
     "storage.multipath_reduced_redundancy",
@@ -229,6 +234,61 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         else "NFS datastore mount accessibility -- not assessed; no "
         "vmw.nfsDatastoreHealth healthd data found in this bundle"
     )
+    has_ssd_health_data = any(h.ssd_health_data_available for h in assessment.hosts)
+    ssd_health_item = (
+        "Per-SSD/NVMe-device operational state, per ESXi's own built-in healthd check "
+        "(vmw.ssdStorageHealth)"
+        if has_ssd_health_data
+        else "Per-SSD/NVMe-device operational state -- not assessed; no "
+        "vmw.ssdStorageHealth healthd data found in this bundle"
+    )
+    has_psod_data = any(h.psod_data_available for h in assessment.hosts)
+    psod_item = (
+        "Recent PSOD (purple-screen crash) history, per ESXi's own built-in healthd "
+        "check (vmw.PSODCount, trailing 7/15 days)"
+        if has_psod_data
+        else "Recent PSOD (purple-screen crash) history -- not assessed; no "
+        "vmw.PSODCount healthd data found in this bundle"
+    )
+    has_vsan_status_data = any(h.vsan_status_data_available for h in assessment.hosts)
+    if has_vsan_status_data:
+        vsan_enabled_hosts = [h for h in assessment.hosts if h.vsan_cluster_enabled]
+        vsan_status_item = (
+            "vSAN cluster membership, per ESXi's own built-in healthd check "
+            f"(vmw.vSANStatus) -- {len(vsan_enabled_hosts)} of "
+            f"{sum(1 for h in assessment.hosts if h.vsan_status_data_available)} host(s) "
+            "with data have vSAN enabled"
+        )
+    else:
+        vsan_status_item = (
+            "vSAN cluster membership -- not assessed; no vmw.vSANStatus healthd data "
+            "found in this bundle"
+        )
+    has_core_services_data = any(h.core_services_data_available for h in assessment.hosts)
+    core_services_item = (
+        "Core ESXi management service (healthd/hostd/hostd-probe/vpxa, and vsanmgmtd "
+        "where vSAN is enabled) running state, per ESXi's own built-in healthd check "
+        "(vmw.coreServicesStatus)"
+        if has_core_services_data
+        else "Core ESXi management service running state -- not assessed; no "
+        "vmw.coreServicesStatus healthd data found in this bundle"
+    )
+    has_hostd_health_data = any(h.hostd_health_data_available for h in assessment.hosts)
+    hostd_health_item = (
+        "hostd responsiveness (distinct from its process existing), per ESXi's own "
+        "built-in healthd check (hostd-health)"
+        if has_hostd_health_data
+        else "hostd responsiveness -- not assessed; no hostd-health healthd data found "
+        "in this bundle"
+    )
+    has_vpxa_status_data = any(h.vpxa_status_data_available for h in assessment.hosts)
+    vpxa_status_item = (
+        "vpxa<->hostd<->vCenter connectivity/heartbeat, per ESXi's own built-in healthd "
+        "check (vmw.vpxaStatus)"
+        if has_vpxa_status_data
+        else "vpxa<->hostd<->vCenter connectivity/heartbeat -- not assessed; no "
+        "vmw.vpxaStatus healthd data found in this bundle"
+    )
     log_window_label = _log_window_label(assessment)
     if vcenter is None:
         return (
@@ -249,6 +309,12 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
             pending_reboot_item,
             memory_health_item,
             nfs_health_item,
+            ssd_health_item,
+            psod_item,
+            core_services_item,
+            hostd_health_item,
+            vpxa_status_item,
+            vsan_status_item,
             evc_item,
             datastore_item,
             vm_item,
@@ -273,6 +339,12 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         pending_reboot_item,
         memory_health_item,
         nfs_health_item,
+        ssd_health_item,
+        psod_item,
+        core_services_item,
+        hostd_health_item,
+        vpxa_status_item,
+        vsan_status_item,
         evc_item,
         datastore_item,
         vm_item,
@@ -699,6 +771,197 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
         )
     rows.append(ComponentStatus("NFS Datastore Health", nfs_health_status, nfs_health_remark))
 
+    hosts_with_ssd_health_data = [h for h in hosts if h.ssd_health_data_available]
+    if hosts_with_ssd_health_data:
+        degraded = [
+            h
+            for h in hosts_with_ssd_health_data
+            if any(d.device_state_enum not in (None, 0) for d in h.ssd_devices)
+        ]
+        ssd_findings = _by_ids(findings, _SSD_RULE_IDS)
+        ssd_status = _status_label(_worst_severity(ssd_findings)) if ssd_findings else "Healthy"
+        if degraded:
+            ssd_remark = (
+                f"{len(degraded)} of {len(hosts_with_ssd_health_data)} host(s) report a "
+                f"non-operational SSD/NVMe device: {', '.join(h.hostname for h in degraded)}."
+            )
+        else:
+            ssd_remark = (
+                f"All {len(hosts_with_ssd_health_data)} of {total} host(s) with "
+                "SSD/NVMe-health data report every tracked device operational "
+                "(most hosts in this bundle have no device tracked by this check)."
+            )
+    else:
+        ssd_status = NOT_ASSESSED
+        ssd_remark = (
+            "Per-SSD/NVMe-device operational state -- not assessed; no "
+            "vmw.ssdStorageHealth healthd data found in this bundle."
+        )
+    rows.append(ComponentStatus("SSD/NVMe Device Health", ssd_status, ssd_remark))
+
+    hosts_with_psod_data = [h for h in hosts if h.psod_data_available]
+    if hosts_with_psod_data:
+        affected = [
+            h
+            for h in hosts_with_psod_data
+            if (h.psod_count_7_days or 0) > 0 or (h.psod_count_15_days or 0) > 0
+        ]
+        psod_findings = _by_ids(findings, _PSOD_RULE_IDS)
+        psod_status = (
+            _status_label(_worst_severity(psod_findings)) if psod_findings else "Healthy"
+        )
+        if affected:
+            psod_remark = (
+                f"{len(affected)} of {len(hosts_with_psod_data)} host(s) have a recorded "
+                f"PSOD in the last 15 days: {', '.join(h.hostname for h in affected)}."
+            )
+        else:
+            psod_remark = (
+                f"All {len(hosts_with_psod_data)} of {total} host(s) with PSOD-count "
+                "data report zero PSODs in the last 15 days."
+            )
+    else:
+        psod_status = NOT_ASSESSED
+        psod_remark = (
+            "Recent PSOD (purple-screen crash) history -- not assessed; no "
+            "vmw.PSODCount healthd data found in this bundle."
+        )
+    rows.append(ComponentStatus("PSOD History", psod_status, psod_remark))
+
+    hosts_with_vsan_status_data = [h for h in hosts if h.vsan_status_data_available]
+    if hosts_with_vsan_status_data:
+        vsan_enabled = [h for h in hosts_with_vsan_status_data if h.vsan_cluster_enabled]
+        if vsan_enabled:
+            vsan_status_remark = (
+                f"{len(vsan_enabled)} of {len(hosts_with_vsan_status_data)} host(s) with "
+                f"vSAN-status data have vSAN enabled: "
+                f"{', '.join(h.hostname for h in vsan_enabled)}."
+            )
+        else:
+            vsan_status_remark = (
+                f"vSAN is disabled on all {len(hosts_with_vsan_status_data)} of {total} "
+                "host(s) with vSAN-status data; vsanmgmtd is therefore excluded from the "
+                "Core Services Status check below on those hosts rather than flagged."
+            )
+        vsan_status_status = "Informational"
+    else:
+        vsan_status_status = NOT_ASSESSED
+        vsan_status_remark = (
+            "vSAN cluster membership -- not assessed; no vmw.vSANStatus healthd data "
+            "found in this bundle."
+        )
+    rows.append(
+        ComponentStatus("vSAN Cluster Membership", vsan_status_status, vsan_status_remark)
+    )
+
+    hosts_with_core_services_data = [h for h in hosts if h.core_services_data_available]
+    if hosts_with_core_services_data:
+        degraded = [
+            h
+            for h in hosts_with_core_services_data
+            if any(
+                h.core_service_pids.get(name) == 0
+                for name in ("healthd", "hostd", "hostd-probe", "vpxa")
+            )
+            or (h.vsan_cluster_enabled and h.core_service_pids.get("vsanmgmtd") == 0)
+        ]
+        core_services_findings = _by_ids(findings, _CORE_SERVICES_RULE_IDS)
+        core_services_status = (
+            _status_label(_worst_severity(core_services_findings))
+            if core_services_findings
+            else "Healthy"
+        )
+        vsan_disabled_hosts = [
+            h for h in hosts_with_core_services_data if not h.vsan_cluster_enabled
+        ]
+        if degraded:
+            core_services_remark = (
+                f"{len(degraded)} of {len(hosts_with_core_services_data)} host(s) report "
+                f"a core service not running: {', '.join(h.hostname for h in degraded)}."
+            )
+        else:
+            core_services_remark = (
+                f"All {len(hosts_with_core_services_data)} of {total} host(s) with "
+                "core-services data report healthd/hostd/hostd-probe/vpxa running."
+            )
+        if vsan_disabled_hosts:
+            core_services_remark += (
+                f" vsanmgmtd is excluded from this check on {len(vsan_disabled_hosts)} "
+                "host(s) where vSAN is disabled (see vSAN Cluster Membership above)."
+            )
+    else:
+        core_services_status = NOT_ASSESSED
+        core_services_remark = (
+            "Core ESXi management service running state -- not assessed; no "
+            "vmw.coreServicesStatus healthd data found in this bundle."
+        )
+    rows.append(
+        ComponentStatus("Core Services Status", core_services_status, core_services_remark)
+    )
+
+    hosts_with_hostd_health_data = [h for h in hosts if h.hostd_health_data_available]
+    if hosts_with_hostd_health_data:
+        unresponsive = [h for h in hosts_with_hostd_health_data if h.hostd_responsive is False]
+        hostd_health_findings = _by_ids(findings, _HOSTD_HEALTH_RULE_IDS)
+        hostd_health_status = (
+            _status_label(_worst_severity(hostd_health_findings))
+            if hostd_health_findings
+            else "Healthy"
+        )
+        if unresponsive:
+            hostd_health_remark = (
+                f"{len(unresponsive)} of {len(hosts_with_hostd_health_data)} host(s) "
+                f"report hostd not responsive: "
+                f"{', '.join(h.hostname for h in unresponsive)}."
+            )
+        else:
+            hostd_health_remark = (
+                f"All {len(hosts_with_hostd_health_data)} of {total} host(s) with "
+                "hostd-health data report hostd responsive."
+            )
+    else:
+        hostd_health_status = NOT_ASSESSED
+        hostd_health_remark = (
+            "hostd responsiveness -- not assessed; no hostd-health healthd data found "
+            "in this bundle."
+        )
+    rows.append(
+        ComponentStatus("hostd Responsiveness", hostd_health_status, hostd_health_remark)
+    )
+
+    hosts_with_vpxa_status_data = [h for h in hosts if h.vpxa_status_data_available]
+    if hosts_with_vpxa_status_data:
+        degraded = [
+            h
+            for h in hosts_with_vpxa_status_data
+            if h.vpxa_managed_by_vc
+            and (
+                h.vpxa_responsive is False
+                or h.vpxa_connected_to_hostd is False
+                or (h.vpxa_config_status is not None and h.vpxa_config_status != "green")
+            )
+        ]
+        vpxa_findings = _by_ids(findings, _VPXA_RULE_IDS)
+        vpxa_status = _status_label(_worst_severity(vpxa_findings)) if vpxa_findings else "Healthy"
+        managed_count = sum(1 for h in hosts_with_vpxa_status_data if h.vpxa_managed_by_vc)
+        if degraded:
+            vpxa_remark = (
+                f"{len(degraded)} of {managed_count} vCenter-managed host(s) report a "
+                f"degraded vpxa connection: {', '.join(h.hostname for h in degraded)}."
+            )
+        else:
+            vpxa_remark = (
+                f"All {managed_count} of {total} vCenter-managed host(s) with "
+                "vpxa-status data report a healthy vpxa<->hostd<->vCenter connection."
+            )
+    else:
+        vpxa_status = NOT_ASSESSED
+        vpxa_remark = (
+            "vpxa<->hostd<->vCenter connectivity/heartbeat -- not assessed; no "
+            "vmw.vpxaStatus healthd data found in this bundle."
+        )
+    rows.append(ComponentStatus("vpxa Connectivity", vpxa_status, vpxa_remark))
+
     hosts_with_switch_data = [h for h in hosts if h.network_switch_data_available]
     if hosts_with_switch_data:
         network_findings = _by_ids(findings, _NETWORK_RULE_IDS)
@@ -1107,6 +1370,7 @@ _CATEGORY_BY_RULE_ID = {
     "storage.alua_path_connectivity": "Storage",
     "storage.vob_problem_event": "Storage",
     "storage.nfs_datastore_inaccessible": "Storage",
+    "storage.ssd_device_not_operational": "Storage",
     "hardware.ipmi_sensor_asserted": "Hardware / SEL",
     "hardware.sel_ecc_uncorrectable": "Hardware / SEL",
     "hardware.sel_drive_predictive_failure": "Hardware / SEL",
@@ -1118,6 +1382,9 @@ _CATEGORY_BY_RULE_ID = {
     "hardware.community_supported_vib_installed": "Other",
     "hardware.configstore_integrity_check_failed": "Other",
     "hardware.pending_reboot_image": "Other",
+    "hardware.psod_detected": "Other",
+    "hardware.core_service_not_running": "Other",
+    "hardware.hostd_unresponsive": "Other",
     "hardware.memory_hardware_health_degraded": "Memory",
     "hardware.memory_reservation_health_degraded": "Memory",
     "storage.multipath_all_paths_dead": "Storage",
@@ -1126,6 +1393,7 @@ _CATEGORY_BY_RULE_ID = {
     "network.vswitch_uplink_link_down": "Network",
     "network.vswitch_all_uplinks_down": "Network",
     "network.mobility_health_check_error": "Network",
+    "network.vpxa_connectivity_degraded": "vCenter",
     "fleet.vswitch_mtu_mismatch": "Network",
     "fleet.datastore_usage_warning": "Storage",
     "fleet.datastore_usage_critical": "Storage",

@@ -50,6 +50,11 @@ than as one flat list: `Storage`, `Hardware / SEL`, `CPU`, `Network`,
 | `hardware.memory_hardware_health_degraded` | Memory | ESXi reports degraded physical memory (ECC) health | Critical | `memory_hardware_state` (from healthd's `vmw.memoryHealth` check, not something vhealth infers) | Point-in-time snapshot from whichever rotated healthd snapshot has the most recent timestamp in the bundle; ESXi's own self-check, sampled every few minutes. Not yet observed firing against real-world data (see below). |
 | `hardware.memory_reservation_health_degraded` | Memory | ESXi reports degraded memory-reservation health | Medium | `memory_reservation_state` (from healthd's `vmw.memoryHealth` check, not something vhealth infers) | Same point-in-time/healthd-self-check caveat as `memory_hardware_health_degraded`; independent of it -- a host can fail one sub-check while passing the other. Not yet observed firing against real-world data (see below). |
 | `storage.nfs_datastore_inaccessible` | Storage | NFS datastore is not accessible/mounted | High | `nfs_datastores[].is_accessible`/`.is_mounted` (from healthd's `vmw.nfsDatastoreHealth` check, not something vhealth infers) | Point-in-time snapshot from whichever rotated healthd snapshot has the most recent timestamp in the bundle; cannot tell whether this is a transient NFS server blip, a sustained outage, or an intentional detach (e.g. decommissioning). **Fired against real data on first try** (see below). |
+| `storage.ssd_device_not_operational` | Storage | SSD/NVMe device reports a non-operational state | High | `ssd_devices[].device_state_enum` (from healthd's `vmw.ssdStorageHealth` check, not something vhealth infers) | Point-in-time snapshot from whichever rotated healthd snapshot has the most recent timestamp in the bundle. Only the known-good `device_state_enum` value (`0`) has been observed in real data; any other value is flagged without assuming a specific severity meaning beyond "not known-good". Not yet observed firing against real-world data (see below). |
+| `hardware.psod_detected` | Other | Host has a recorded PSOD (purple-screen crash) in its recent history | Critical (7-day window) / High (15-day window only) | `psod_count_7_days`/`psod_count_15_days` (from healthd's `vmw.PSODCount` check, not something vhealth infers) | Reports healthd's own trailing crash count as of its own check time, not the crash's exact date/cause. Not yet observed firing against real-world data (see below). |
+| `hardware.core_service_not_running` | Other | A core ESXi management service is not running | Critical | `core_service_pids` (from healthd's `vmw.coreServicesStatus` check, not something vhealth infers) | Point-in-time snapshot from whichever rotated healthd snapshot has the most recent timestamp in the bundle. `vsanmgmtd` is only ever flagged when `vsan_cluster_enabled` (from `vmw.vSANStatus`) is `True` for that host -- see "vSAN caveat" below. Not yet observed firing against real-world data (see below). |
+| `hardware.hostd_unresponsive` | Other | hostd is not responding to ESXi's own health probe | Critical | `hostd_responsive` (from healthd's `hostd-health` check, not something vhealth infers) | Point-in-time snapshot from whichever rotated healthd snapshot has the most recent timestamp in the bundle; distinct from `hardware.core_service_not_running`'s PID-based check -- a hung hostd can hold a live PID while failing to respond to probes. Not yet observed firing against real-world data (see below). |
+| `network.vpxa_connectivity_degraded` | vCenter | vpxa reports a degraded connection to vCenter | High | `vpxa_responsive`/`vpxa_connected_to_hostd`/`vpxa_config_status` (from healthd's `vmw.vpxaStatus` check, not something vhealth infers) | Point-in-time snapshot from whichever rotated healthd snapshot has the most recent timestamp in the bundle; only evaluated when the host reports `managed_by_VC=true`. Not yet observed firing against real-world data (see below). |
 
 ## Validation status
 
@@ -262,6 +267,46 @@ previously-unreported storage-connectivity problem on that one host,
 surfaced directly by ESXi's own tooling rather than inferred. Both the
 firing path (this host) and the "no NFS datastores configured" healthy
 path (every other host) are therefore real-data-validated.
+
+`storage.ssd_device_not_operational`, `hardware.psod_detected`,
+`hardware.core_service_not_running`, and `hardware.hostd_unresponsive`'s
+non-firing paths were each confirmed against the real 10-host EAMSC2
+bundle: 2 of the 10 hosts (`eamsc2esxi18`, `eamsc2esxi22`) have a
+tracked NVMe boot device (Dell BOSS-N1) and both report
+`device_state_enum: 0` ("The device is operational"); every host
+reports zero PSODs in both the 7- and 15-day windows; every host's
+`healthd`/`hostd`/`hostd-probe`/`vpxa` PIDs are non-zero on every
+rotated snapshot; and every host's `hostd-health` snapshot reports
+`state: "Responsive"`. The firing case for each has not yet been
+observed against real-world data and is covered by a synthetic unit
+test only.
+
+`network.vpxa_connectivity_degraded`'s non-firing path was likewise
+confirmed: every host's most recent `vmw.vpxaStatus` snapshot reports
+`responsive: true`, `connected_to_hostd: true`, `managed_by_VC: true`,
+and `config_status: "green"`. The firing case has not yet been
+observed against real-world data and is covered by a synthetic unit
+test only.
+
+**vSAN caveat on `hardware.core_service_not_running`.** On the real
+EAMSC2 bundle, `vmw.coreServicesStatus`'s `vsanmgmtd` PID is `0` on
+most hosts' snapshots -- and every host's `vmw.vSANStatus` reports
+`vSAN_cluster_enabled: false`, confirming vSAN is simply disabled on
+this cluster, not a service failure. A naive "any tracked service PID
+is 0" rule would have produced a false-positive storm on nearly every
+host in this bundle. `hardware.core_service_not_running` therefore
+only ever flags `vsanmgmtd == 0` when that same host's
+`vsan_cluster_enabled` is `True`; when it is `False` or unknown,
+`vsanmgmtd` is silently excluded from the rule (never flagged), but
+the report's "Core Services Status" and "vSAN Cluster Membership"
+component rows say so explicitly even when nothing fires, so a reader
+is never left wondering why `vsanmgmtd` was not considered.
+`vmw.vSANStatus` itself has no dedicated rule/Finding -- "vSAN
+enabled" and "vSAN disabled" are each a valid, non-problematic state
+by themselves, so it is parsed and surfaced only as descriptive
+context (the "vSAN Cluster Membership" component row, status
+"Informational") and as the input the core-services exclusion above
+depends on.
 
 ## Adding a rule
 
