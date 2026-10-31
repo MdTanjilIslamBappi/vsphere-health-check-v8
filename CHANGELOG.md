@@ -322,6 +322,25 @@ and the "Known limitations" section of [README.md](README.md)).
   against the real 10-host EAMSC2 bundle: re-running the full
   assessment at the new 13-week/91-day default reproduces the exact
   same 63 findings as the previous fixed-90-day behaviour.
+- `hardware.memory_hardware_health_degraded` and
+  `hardware.memory_reservation_health_degraded` rules and
+  `memory_health.py` parser: reads ESXi's own built-in `healthd`
+  memory-health self-check (`var/lib/vmware/osdata/healthd/
+  vmw.memoryHealth-*.json`), which reports two independent
+  "Green"/"Yellow"/"Red"-style verdicts -- physical/ECC hardware
+  health (plus corrected/uncorrected error counts since boot) and
+  memory-reservation admission-control health -- not something vhealth
+  infers from raw counters. The rotated snapshot filenames are not in
+  chronological order, so the parser selects by each snapshot's own
+  `structured.time` field rather than filename. Activates the
+  previously-reserved `Memory` category (new entry in
+  `CATEGORY_DISPLAY_ORDER`). New "Memory Health" component row and
+  scope item. Validated against the real 10-host EAMSC2 bundle: every
+  host's most recent snapshot reports `hardware_state: "Green"`,
+  `reservation_state: "Green"`, and zero ECC errors since boot, so the
+  healthy (non-firing) path is real-data-confirmed; the firing path
+  for either sub-check is covered by a synthetic unit test only,
+  stated explicitly in RULE_CATALOG.md.
 
 ### Fixed
 

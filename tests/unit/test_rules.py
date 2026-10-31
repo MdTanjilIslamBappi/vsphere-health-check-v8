@@ -440,6 +440,45 @@ def test_pending_reboot_no_pending_image_raises_no_finding(tmp_path):
     assert "hardware.pending_reboot_image" not in rule_ids
 
 
+def test_memory_hardware_health_degraded_raises_critical_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path,
+        memory_hardware_state="Red",
+        memory_reservation_state="Green",
+        memory_uncorrected_errors_since_boot=1,
+    )
+    findings = evaluate_all([host])
+    degraded = [f for f in findings if f.rule_id == "hardware.memory_hardware_health_degraded"]
+    assert len(degraded) == 1
+    assert degraded[0].severity.value == "critical"
+    assert "Red" in degraded[0].summary
+    assert "hardware.memory_reservation_health_degraded" not in {f.rule_id for f in findings}
+
+
+def test_memory_reservation_health_degraded_raises_medium_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path, memory_hardware_state="Green", memory_reservation_state="Yellow"
+    )
+    findings = evaluate_all([host])
+    degraded = [
+        f for f in findings if f.rule_id == "hardware.memory_reservation_health_degraded"
+    ]
+    assert len(degraded) == 1
+    assert degraded[0].severity.value == "medium"
+    assert "Yellow" in degraded[0].summary
+    assert "hardware.memory_hardware_health_degraded" not in {f.rule_id for f in findings}
+
+
+def test_memory_health_green_raises_no_finding(tmp_path):
+    host = _assessed_host(
+        tmp_path, memory_hardware_state="Green", memory_reservation_state="Green"
+    )
+    findings = evaluate_all([host])
+    rule_ids = {f.rule_id for f in findings}
+    assert "hardware.memory_hardware_health_degraded" not in rule_ids
+    assert "hardware.memory_reservation_health_degraded" not in rule_ids
+
+
 def test_log_window_weeks_controls_whether_sel_finding_fires(tmp_path):
     """An event 10 days before capture (within a 2-week window, outside a
 

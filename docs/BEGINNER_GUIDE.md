@@ -201,8 +201,8 @@ This writes, into the `out` folder:
   (evidence lines, remediation, limitations) behind the main report, as a
   separate document so the main report stays a quick read; findings are
   grouped under subsystem headers (Storage, Network, Hardware / SEL,
-  CPU, vCenter, Other) so you can jump straight to the area you care
-  about
+  Memory, CPU, vCenter, Other) so you can jump straight to the area you
+  care about
 
 When it finishes it prints a one-line summary, e.g.:
 

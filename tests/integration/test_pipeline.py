@@ -210,6 +210,23 @@ def test_run_assessment_flags_pending_reboot_image(tmp_path):
     assert "hardware.pending_reboot_image" in rule_ids
 
 
+def test_run_assessment_flags_degraded_memory_health(tmp_path):
+    bundle_path = build_tgz(
+        tmp_path / "host.tgz",
+        memory_hardware_state="Red",
+        memory_reservation_state="Green",
+        memory_uncorrected_errors_since_boot=2,
+    )
+    config = load_config(None)
+    assessment = run_assessment(bundle_path, tmp_path / "out", config)
+
+    host = assessment.hosts[0]
+    assert host.memory_health_data_available is True
+    assert host.memory_hardware_state == "Red"
+    rule_ids = {f.rule_id for f in assessment.findings}
+    assert "hardware.memory_hardware_health_degraded" in rule_ids
+
+
 def test_run_assessment_honours_configured_log_window_weeks(tmp_path):
     import dataclasses
 

@@ -31,6 +31,7 @@ def test_component_status_rows_marks_unassessed_vcenter_sections():
     assert rows["ConfigStore Integrity"].status == summary.NOT_ASSESSED
     assert rows["Migration Network Health"].status == summary.NOT_ASSESSED
     assert rows["Pending Reboot (Image Profile)"].status == summary.NOT_ASSESSED
+    assert rows["Memory Health"].status == summary.NOT_ASSESSED
 
 
 def test_component_status_rows_reports_real_datastore_and_vm_data_when_present():
@@ -294,6 +295,43 @@ def test_component_status_rows_reports_pending_reboot_healthy_when_none_staged()
     assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
     rows = {row.component: row for row in summary.component_status_rows(assessment)}
     assert rows["Pending Reboot (Image Profile)"].status == "Healthy"
+
+
+def test_component_status_rows_reports_degraded_memory_hardware_health():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        memory_health_data_available=True,
+        memory_hardware_state="Red",
+        memory_reservation_state="Green",
+    )
+    finding = Finding(
+        rule_id="hardware.memory_hardware_health_degraded",
+        title="ESXi reports degraded physical memory (ECC) health",
+        severity=Severity.CRITICAL,
+        summary="...",
+        affected_host="h1",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[finding])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    memory_row = rows["Memory Health"]
+    assert memory_row.status == "Attention Needed"
+    assert "h1" in memory_row.remarks
+    assert summary.category_for_rule_id("hardware.memory_hardware_health_degraded") == "Memory"
+    assert summary.category_for_rule_id("hardware.memory_reservation_health_degraded") == "Memory"
+
+
+def test_component_status_rows_reports_memory_healthy_when_all_green():
+    host = HostInfo(
+        hostname="h1",
+        bundle_source="h1",
+        memory_health_data_available=True,
+        memory_hardware_state="Green",
+        memory_reservation_state="Green",
+    )
+    assessment = Assessment(metadata=_metadata(), hosts=[host], findings=[])
+    rows = {row.component: row for row in summary.component_status_rows(assessment)}
+    assert rows["Memory Health"].status == "Healthy"
 
 
 def test_component_status_rows_reports_vswitch_single_uplink():

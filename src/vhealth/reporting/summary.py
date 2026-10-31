@@ -48,6 +48,10 @@ _VIB_RULE_IDS = {"hardware.community_supported_vib_installed"}
 _CONFIGSTORE_RULE_IDS = {"hardware.configstore_integrity_check_failed"}
 _MOBILITY_RULE_IDS = {"network.mobility_health_check_error"}
 _PENDING_REBOOT_RULE_IDS = {"hardware.pending_reboot_image"}
+_MEMORY_RULE_IDS = {
+    "hardware.memory_hardware_health_degraded",
+    "hardware.memory_reservation_health_degraded",
+}
 _MULTIPATH_RULE_IDS = {
     "storage.multipath_all_paths_dead",
     "storage.multipath_reduced_redundancy",
@@ -208,6 +212,14 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         else "Pending-reboot image profile -- not assessed; no esxcli software "
         "profile get --rebooting-image data found in this bundle"
     )
+    has_memory_health_data = any(h.memory_health_data_available for h in assessment.hosts)
+    memory_health_item = (
+        "Memory (ECC hardware and reservation admission-control) health, per ESXi's "
+        "own built-in healthd check (vmw.memoryHealth)"
+        if has_memory_health_data
+        else "Memory health -- not assessed; no vmw.memoryHealth healthd data found "
+        "in this bundle"
+    )
     log_window_label = _log_window_label(assessment)
     if vcenter is None:
         return (
@@ -226,6 +238,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
             network_item,
             mobility_item,
             pending_reboot_item,
+            memory_health_item,
             evc_item,
             datastore_item,
             vm_item,
@@ -248,6 +261,7 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         network_item,
         mobility_item,
         pending_reboot_item,
+        memory_health_item,
         evc_item,
         datastore_item,
         vm_item,
@@ -607,6 +621,39 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
             "Pending Reboot (Image Profile)", pending_reboot_status, pending_reboot_remark
         )
     )
+
+    hosts_with_memory_health_data = [h for h in hosts if h.memory_health_data_available]
+    if hosts_with_memory_health_data:
+        degraded = [
+            h
+            for h in hosts_with_memory_health_data
+            if h.memory_hardware_state not in (None, "Green")
+            or h.memory_reservation_state not in (None, "Green")
+        ]
+        memory_health_findings = _by_ids(findings, _MEMORY_RULE_IDS)
+        memory_health_status = (
+            _status_label(_worst_severity(memory_health_findings))
+            if memory_health_findings
+            else "Healthy"
+        )
+        if degraded:
+            memory_health_remark = (
+                f"{len(degraded)} of {len(hosts_with_memory_health_data)} host(s) report a "
+                f"non-'Green' memory hardware or reservation state: "
+                f"{', '.join(h.hostname for h in degraded)}."
+            )
+        else:
+            memory_health_remark = (
+                f"All {len(hosts_with_memory_health_data)} of {total} host(s) with "
+                "memory-health data report 'Green' hardware and reservation state."
+            )
+    else:
+        memory_health_status = NOT_ASSESSED
+        memory_health_remark = (
+            "Memory health -- not assessed; no vmw.memoryHealth healthd data found "
+            "in this bundle."
+        )
+    rows.append(ComponentStatus("Memory Health", memory_health_status, memory_health_remark))
 
     hosts_with_switch_data = [h for h in hosts if h.network_switch_data_available]
     if hosts_with_switch_data:
@@ -1005,8 +1052,7 @@ def detailed_observations(assessment: Assessment) -> list[str]:
 # Which domain each rule belongs to, for grouping/reading the Recommendation
 # section by subsystem rather than as one flat list. Every rule_id must have
 # an entry here -- CONTRIBUTING.md's "add a rule" checklist includes adding
-# one. Categories not yet produced by any rule (Network, Memory) are kept
-# available for rules added later.
+# one.
 _CATEGORY_BY_RULE_ID = {
     "storage.smart_health_not_ok": "Storage",
     "storage.smart_reallocated_sectors": "Storage",
@@ -1027,6 +1073,8 @@ _CATEGORY_BY_RULE_ID = {
     "hardware.community_supported_vib_installed": "Other",
     "hardware.configstore_integrity_check_failed": "Other",
     "hardware.pending_reboot_image": "Other",
+    "hardware.memory_hardware_health_degraded": "Memory",
+    "hardware.memory_reservation_health_degraded": "Memory",
     "storage.multipath_all_paths_dead": "Storage",
     "storage.multipath_reduced_redundancy": "Storage",
     "network.vswitch_single_uplink": "Network",
@@ -1047,7 +1095,15 @@ _MAX_EVIDENCE_LINES_PER_GROUP = 5
 # Reader-friendly category order for the detailed findings log (see
 # ``findings_by_category`` below) -- storage and network issues are the
 # ones an engineer most often needs to act on first, "Other" always last.
-CATEGORY_DISPLAY_ORDER = ["Storage", "Network", "Hardware / SEL", "CPU", "vCenter", "Other"]
+CATEGORY_DISPLAY_ORDER = [
+    "Storage",
+    "Network",
+    "Hardware / SEL",
+    "Memory",
+    "CPU",
+    "vCenter",
+    "Other",
+]
 
 
 def category_for_rule_id(rule_id: str) -> str:

@@ -106,6 +106,10 @@ def build_host_dir(
     mobility_tested_destinations: int = 1,
     pending_reboot: bool | None = None,
     pending_reboot_image_name: str = "(Updated) Synthetic-ESXi-8.0U3-standard",
+    memory_hardware_state: str | None = None,
+    memory_reservation_state: str | None = None,
+    memory_corrected_errors_since_boot: int = 0,
+    memory_uncorrected_errors_since_boot: int = 0,
 ) -> Path:
     """Create a synthetic vm-support host directory tree under ``root``.
 
@@ -184,6 +188,13 @@ def build_host_dir(
     real pending profile name ``pending_reboot_image_name`` (True) or
     the literal ``No pending image profile available.`` (False); left
     as ``None``, no pending-reboot data is written at all.
+
+    ``memory_hardware_state``/``memory_reservation_state``, if either is
+    given (e.g. ``"Green"``/``"Red"``), adds a single rotated
+    ``vmw.memoryHealth`` healthd JSON snapshot reporting those states
+    (plus ``memory_corrected_errors_since_boot``/
+    ``memory_uncorrected_errors_since_boot``); left as ``None`` for both,
+    no memory-health data is written at all (memory health not assessed).
     """
     bundle_dir = root / f"esx-{hostname}-2026-01-15"
     (bundle_dir / "commands").mkdir(parents=True)
@@ -521,6 +532,32 @@ def build_host_dir(
             / "commands"
             / "localcli_software-profile-get---rebooting-image.txt"
         ).write_text(rebooting_image_dump, encoding="utf-8")
+
+    if memory_hardware_state is not None or memory_reservation_state is not None:
+        healthd_dir = bundle_dir / "var" / "lib" / "vmware" / "osdata" / "healthd"
+        healthd_dir.mkdir(parents=True, exist_ok=True)
+        memory_health_dump = {
+            "structured": {
+                "name": "vmw.memoryHealth",
+                "status": 0,
+                "time": "2026-01-15T10:00:00+00:00",
+            },
+            "unstructured": {
+                "hardware_info": {
+                    "EWMA_of_corrected_errors_per_period": 0,
+                    "hardware_state": memory_hardware_state or "Green",
+                    "period_in_seconds": 120,
+                    "total_corrected_errors_since_boot": memory_corrected_errors_since_boot,
+                    "total_uncorrected_errors_since_boot": memory_uncorrected_errors_since_boot,
+                },
+                "reservation_info": {
+                    "reservation_state": memory_reservation_state or "Green",
+                },
+            },
+        }
+        (healthd_dir / "vmw.memoryHealth-0.json").write_text(
+            json.dumps(memory_health_dump), encoding="utf-8"
+        )
 
     return bundle_dir
 

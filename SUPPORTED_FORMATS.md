@@ -65,6 +65,7 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
 | `commands/sqlite3_etcvmwareconfigstorecurrent-store-1-PRAGMAintegrity_check.txt` | `configstore.py` | ESXi's host-configuration database (ConfigStore) SQLite integrity check result (`ok` vs. a corruption description) |
 | `commands/mobility_network_health_check.txt` | `mobility.py` | ESXi's own built-in migration-network (vMotion/Provisioning) health-check verdict and sub-check detail (JSON; a Python traceback instead of JSON on some builds means the tool itself failed to run) |
 | `commands/localcli_software-profile-get---rebooting-image.txt` | `pending_reboot.py` | Whether an image profile is staged but not yet applied by a reboot (vs. the literal "No pending image profile available.") |
+| `var/lib/vmware/osdata/healthd/vmw.memoryHealth-*.json` | `memory_health.py` | ESXi's own built-in memory-health verdict: physical/ECC hardware state (plus corrected/uncorrected error counts since boot) and memory-reservation admission-control state, from whichever rotated snapshot has the most recent timestamp |
 
 ## Known gaps (not yet implemented)
 

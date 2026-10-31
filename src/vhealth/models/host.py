@@ -198,6 +198,17 @@ class HostInfo(BaseModel):
     # profile get --rebooting-image). None means no reboot is pending.
     pending_reboot_data_available: bool = False
     pending_reboot_image_name: str | None = None
+    # ESXi's own built-in memory-health verdict (healthd's vmw.memoryHealth
+    # check, rotated JSON files under var/lib/vmware/osdata/healthd/). Two
+    # independent sub-states from the same check: hardware_state reflects
+    # physical/ECC memory health, reservation_state reflects the host's
+    # memory-reservation admission-control health. "Green" means healthy;
+    # a non-Green value is healthd's own verdict, not something vhealth infers.
+    memory_health_data_available: bool = False
+    memory_hardware_state: str | None = None
+    memory_reservation_state: str | None = None
+    memory_corrected_errors_since_boot: int | None = None
+    memory_uncorrected_errors_since_boot: int | None = None
     # Storage multipath state (esxcli storage nmp path list), aggregated
     # per device from every path block that names it.
     multipath_data_available: bool = False

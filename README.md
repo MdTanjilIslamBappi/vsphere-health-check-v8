@@ -147,7 +147,7 @@ aggregate hardware-status grid, 3.2 a VMware-components status table plus
 "Key Findings at a Glance", 3.3 an ESXi host inventory table (server
 model/CPU model/management IP) plus "Detailed Observations", and 3.4
 grouped Recommendations. Each 3.4 group names its category (Storage,
-Hardware / SEL, CPU, or Other -- see RULE_CATALOG.md), which hosts/objects
+Network, Hardware / SEL, CPU, Memory, or Other -- see RULE_CATALOG.md), which hosts/objects
 are affected, why the finding matters, specifically where to check it
 (the host-side log/file and, where relevant, which external system to
 correlate it with), and a short evidence table of the matching lines. See

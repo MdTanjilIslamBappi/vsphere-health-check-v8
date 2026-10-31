@@ -9,6 +9,7 @@ from vhealth.parsers import (
     datastore,
     hardware_inventory,
     ipmi_sel,
+    memory_health,
     mobility,
     multipath,
     nic_link,
@@ -514,3 +515,86 @@ def test_pending_reboot_parser_reports_warning_when_file_missing(tmp_path):
     warnings = pending_reboot.parse(host_dir, host)
     assert warnings != []
     assert host.pending_reboot_data_available is False
+
+
+def test_memory_health_parser_reports_green_state(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path, memory_hardware_state="Green", memory_reservation_state="Green"
+    )
+    warnings = memory_health.parse(host_dir, host)
+    assert warnings == []
+    assert host.memory_health_data_available is True
+    assert host.memory_hardware_state == "Green"
+    assert host.memory_reservation_state == "Green"
+    assert host.memory_corrected_errors_since_boot == 0
+    assert host.memory_uncorrected_errors_since_boot == 0
+
+
+def test_memory_health_parser_reports_degraded_state_and_error_counts(tmp_path):
+    host_dir, host = _build_host(
+        tmp_path,
+        memory_hardware_state="Red",
+        memory_reservation_state="Yellow",
+        memory_corrected_errors_since_boot=12,
+        memory_uncorrected_errors_since_boot=1,
+    )
+    warnings = memory_health.parse(host_dir, host)
+    assert warnings == []
+    assert host.memory_health_data_available is True
+    assert host.memory_hardware_state == "Red"
+    assert host.memory_reservation_state == "Yellow"
+    assert host.memory_corrected_errors_since_boot == 12
+    assert host.memory_uncorrected_errors_since_boot == 1
+
+
+def test_memory_health_parser_reports_warning_when_data_missing(tmp_path):
+    host_dir, host = _build_host(tmp_path)
+    warnings = memory_health.parse(host_dir, host)
+    assert warnings != []
+    assert host.memory_health_data_available is False
+
+
+def _memory_health_snapshot(time: str, hardware_state: str, corrected_errors: int = 0) -> dict:
+    return {
+        "structured": {"name": "vmw.memoryHealth", "status": 0, "time": time},
+        "unstructured": {
+            "hardware_info": {
+                "hardware_state": hardware_state,
+                "total_corrected_errors_since_boot": corrected_errors,
+                "total_uncorrected_errors_since_boot": 0,
+                "EWMA_of_corrected_errors_per_period": 0,
+                "period_in_seconds": 120,
+            },
+            "reservation_info": {"reservation_state": "Green"},
+        },
+    }
+
+
+def test_memory_health_parser_picks_snapshot_with_latest_timestamp(tmp_path):
+    host_dir, host = _build_host(tmp_path, memory_hardware_state="Green")
+    healthd_dir = host_dir / "var" / "lib" / "vmware" / "osdata" / "healthd"
+
+    # The real rotation naming (-0, -1, -2, ...) is not chronological order;
+    # the parser must pick by each snapshot's own structured.time, not by
+    # filename. -0 (written by the fixture) is the oldest here; -2, named
+    # with a lower-sorting suffix than a hypothetical -10 would have, is
+    # the actual latest.
+    import json as _json
+
+    (healthd_dir / "vmw.memoryHealth-0.json").write_text(
+        _json.dumps(_memory_health_snapshot("2026-01-15T10:00:00+00:00", "Green")),
+        encoding="utf-8",
+    )
+    (healthd_dir / "vmw.memoryHealth-1.json").write_text(
+        _json.dumps(_memory_health_snapshot("2026-01-15T09:00:00+00:00", "Yellow")),
+        encoding="utf-8",
+    )
+    (healthd_dir / "vmw.memoryHealth-2.json").write_text(
+        _json.dumps(_memory_health_snapshot("2026-01-15T11:00:00+00:00", "Red", 3)),
+        encoding="utf-8",
+    )
+
+    warnings = memory_health.parse(host_dir, host)
+    assert warnings == []
+    assert host.memory_hardware_state == "Red"
+    assert host.memory_corrected_errors_since_boot == 3

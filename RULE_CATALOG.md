@@ -13,9 +13,8 @@ rule.
 
 Each rule is also assigned a **category** (`src/vhealth/reporting/summary.py:_CATEGORY_BY_RULE_ID`),
 used to group the Recommendation section of the report by subsystem rather
-than as one flat list: `Storage`, `Hardware / SEL`, `CPU`, `Network`, or
-`Other`. `Memory` remains a reserved category for a rule not yet written --
-see "Adding a rule" below.
+than as one flat list: `Storage`, `Hardware / SEL`, `CPU`, `Network`,
+`Memory`, or `Other`. See "Adding a rule" below for how to add a new one.
 
 | Rule ID | Category | Title | Severity | Evidence required | Limitations |
 |---|---|---|---|---|---|
@@ -48,6 +47,8 @@ see "Adding a rule" below.
 | `hardware.configstore_integrity_check_failed` | Other | ConfigStore database integrity check did not report 'ok' | Critical | `configstore_integrity_ok` (from `sqlite3 ... PRAGMA integrity_check` against `/etc/vmware/configstore`) | Point-in-time snapshot at capture only; implemented from SQLite's documented integrity_check behaviour, not yet observed firing against real-world data (see below). |
 | `network.mobility_health_check_error` | Network | Migration network health check reported ERROR | High | `mobility_checks[].status` (from ESXi's own `mobility_network_health_check` tool, not something vhealth infers) | Point-in-time snapshot at capture only, from ESXi's own health-check tool; that tool itself fails to run at all on some hosts (a Python traceback instead of JSON), in which case the host is not assessed by this rule. |
 | `hardware.pending_reboot_image` | Other | Host has an image profile staged but not yet applied by a reboot | Medium | `pending_reboot_image_name` (from `esxcli software profile get --rebooting-image`) | Point-in-time snapshot at capture only; cannot tell how long the reboot has been pending or why it was deferred. Not yet observed firing against real-world data (see below). |
+| `hardware.memory_hardware_health_degraded` | Memory | ESXi reports degraded physical memory (ECC) health | Critical | `memory_hardware_state` (from healthd's `vmw.memoryHealth` check, not something vhealth infers) | Point-in-time snapshot from whichever rotated healthd snapshot has the most recent timestamp in the bundle; ESXi's own self-check, sampled every few minutes. Not yet observed firing against real-world data (see below). |
+| `hardware.memory_reservation_health_degraded` | Memory | ESXi reports degraded memory-reservation health | Medium | `memory_reservation_state` (from healthd's `vmw.memoryHealth` check, not something vhealth infers) | Same point-in-time/healthd-self-check caveat as `memory_hardware_health_degraded`; independent of it -- a host can fail one sub-check while passing the other. Not yet observed firing against real-world data (see below). |
 
 ## Validation status
 
@@ -236,6 +237,18 @@ available.`, so the non-firing (healthy) path is real-data-validated.
 The firing path (a host with patches staged but never rebooted) has
 not yet been observed against real-world data and is covered by a
 synthetic unit test only.
+
+`hardware.memory_hardware_health_degraded` and
+`hardware.memory_reservation_health_degraded`'s non-firing path was
+confirmed against the real 10-host EAMSC2 bundle: every host's most
+recent `vmw.memoryHealth` healthd snapshot (there are several rotated
+JSON snapshots per host under `var/lib/vmware/osdata/healthd/`, 5
+minutes apart; the parser selects the one with the latest
+`structured.time`, not the lowest filename suffix) reports
+`hardware_state: "Green"`, `reservation_state: "Green"`, and zero
+corrected/uncorrected ECC errors since boot on every host. The firing
+(non-Green) case for either sub-check has not yet been observed
+against real-world data and is covered by a synthetic unit test only.
 
 ## Adding a rule
 
