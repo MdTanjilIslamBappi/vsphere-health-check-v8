@@ -17,10 +17,12 @@ grouped recommendations); the full per-finding breakdown is deliberately
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from vhealth.models.assessment import Assessment
 from vhealth.models.findings import Finding, Severity
 from vhealth.models.host import HostInfo
+from vhealth.models.vcenter import VCenterInfo
 
 _DEVICE_HEALTH_RULE_IDS = {
     "storage.smart_health_not_ok",
@@ -326,8 +328,10 @@ def scope_items(assessment: Assessment) -> tuple[str, ...]:
         "Hardware sensor status (IPMI)",
         f"Storage-related log signals (PDL/APD/ALUA/VOB), scoped to the last {log_window_label}",
         "Server and CPU hardware inventory, including processor compatibility across hosts",
-        "vCenter Server appliance status: version, service-control service status and "
-        f"appliance filesystem usage (vCenter bundle for {vcenter.hostname})",
+        "vCenter Server appliance status: version, service-control service status, "
+        "appliance filesystem usage, and vsphere.local SSO/STS certificate expiry "
+        "(not the VECS-managed Machine SSL or solution-user certificates, which no "
+        f"vc-support bundle captures) (vCenter bundle for {vcenter.hostname})",
         "Cluster inventory: cluster names and member hosts, as recovered from the "
         "vCenter operational logs in the capture",
         ntp_item,
@@ -389,6 +393,26 @@ def _by_ids(findings: list[Finding], ids: set[str]) -> list[Finding]:
     return [f for f in findings if f.rule_id in ids]
 
 
+def _nearest_certificate_expiry(vcenter: VCenterInfo) -> tuple[str, str] | None:
+    """(subject_cn or serial, not_after) for whichever SSO/STS certificate
+
+    expires soonest, or ``None`` if no certificate data was parsed.
+    """
+    parsed = []
+    for cert in vcenter.sts_certificates:
+        if not cert.not_after:
+            continue
+        try:
+            not_after = datetime.fromisoformat(cert.not_after)
+        except ValueError:
+            continue
+        parsed.append((not_after, cert.subject_cn or f"serial {cert.serial_number}"))
+    if not parsed:
+        return None
+    not_after, subject = min(parsed, key=lambda item: item[0])
+    return subject, not_after.date().isoformat()
+
+
 @dataclass(frozen=True)
 class ComponentStatus:
     component: str
@@ -436,6 +460,12 @@ def component_status_rows(assessment: Assessment) -> list[ComponentStatus]:
             )
         if busiest is not None:
             remark_bits.append(f"busiest appliance disk {busiest.mount} at {max_percent}% used")
+        nearest_cert = _nearest_certificate_expiry(vcenter)
+        if nearest_cert is not None:
+            subject, not_after = nearest_cert
+            remark_bits.append(
+                f"nearest SSO/STS certificate expiry: {subject} on {not_after}"
+            )
         rows.append(
             ComponentStatus(
                 "vCenter Server",
@@ -1401,6 +1431,7 @@ _CATEGORY_BY_RULE_ID = {
     "vcenter.core_service_stopped": "vCenter",
     "vcenter.optional_service_stopped": "vCenter",
     "vcenter.appliance_disk_usage": "vCenter",
+    "vcenter.sts_certificate_expiring": "vCenter",
 }
 _DEFAULT_CATEGORY = "Other"
 _MAX_EVIDENCE_LINES_PER_GROUP = 5

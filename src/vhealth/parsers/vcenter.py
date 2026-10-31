@@ -8,17 +8,22 @@ warning so the rest of the assessment can proceed.
 vc-support bundles mirror the VCSA appliance filesystem: ``README``,
 ``commands/*`` (the same command-name-mangling scheme as on ESXi), and
 ``var/log/vmware/*`` service log directories. Only appliance-level
-identity, service status and filesystem usage are parsed here; the
-vCenter database is not read.
+identity, service status, filesystem usage, and SSO/STS certificate
+expiry are parsed here; the vCenter database is not read.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import re
 
-from vhealth.models.vcenter import VCenterApplianceDisk, VCenterInfo
+from cryptography import x509
+from cryptography.x509.oid import NameOID
 
-VERSION = "1.0.0"
+from vhealth.models.vcenter import VCenterApplianceDisk, VCenterCertificate, VCenterInfo
+
+VERSION = "1.1.0"
 
 _README_CAPTURE_PREFIX = "Captured on: "
 _README_VERSION_PREFIX = "vm-support version: "
@@ -46,6 +51,7 @@ def parse(root, vcenter: VCenterInfo) -> list[str]:
     warnings += _parse_service_control(root, vcenter)
     warnings += _parse_df(root, vcenter)
     warnings += _parse_vpxd_clusters(root, vcenter)
+    warnings += _parse_sts_certificates(root, vcenter)
     return warnings
 
 
@@ -244,3 +250,91 @@ def _scan_vpxd_log_for_clusters(path, vcenter: VCenterInfo) -> None:
                     for member in members:
                         if member not in existing:
                             existing.append(member)
+
+
+# SSO/STS signing certificate expiry, from vmdir's LDAP export of the
+# vsphere.local SSO domain (sts-certificates.txt). This is a loose LDIF
+# reader, not a general-purpose one: it only understands "dn:" lines
+# (to know which entry a certificate belongs to) and base64-encoded
+# "userCertificate::" attribute values, with RFC 2849 line-folding
+# (a continuation line starts with exactly one space, concatenated
+# directly onto the previous line without that space).
+_STS_CERTIFICATES_FILENAME = "sts-certificates.txt"
+_DN_PREFIX = "dn:"
+_USER_CERTIFICATE_PREFIX = "userCertificate::"
+# "cn=TenantCredential-1,cn=vsphere.local,..." -> "TenantCredential-1"
+_DN_ENTRY_NAME_RE = re.compile(r"^cn=([^,]+)")
+
+
+def _parse_sts_certificates(root, vcenter: VCenterInfo) -> list[str]:
+    path = root / "commands" / _STS_CERTIFICATES_FILENAME
+    if not path.is_file():
+        return [f"{_STS_CERTIFICATES_FILENAME} not found; SSO/STS certificate expiry unavailable"]
+
+    text = path.read_text(encoding="utf-8", errors="replace")
+    unfolded = _unfold_ldif_lines(text.split("\n"))
+
+    warnings: list[str] = []
+    certs_by_serial: dict[int, VCenterCertificate] = {}
+    current_entry_name: str | None = None
+    for line in unfolded:
+        if line.startswith(_DN_PREFIX):
+            match = _DN_ENTRY_NAME_RE.match(line[len(_DN_PREFIX) :].strip())
+            current_entry_name = match.group(1) if match else None
+        elif line.startswith(_USER_CERTIFICATE_PREFIX):
+            b64 = line[len(_USER_CERTIFICATE_PREFIX) :].strip()
+            cert = _decode_certificate(b64, warnings)
+            if cert is None:
+                continue
+            serial = cert.serial_number
+            if serial in certs_by_serial:
+                if current_entry_name and current_entry_name not in certs_by_serial[
+                    serial
+                ].entry_names:
+                    certs_by_serial[serial].entry_names.append(current_entry_name)
+                continue
+            subject_cn = _common_name(cert.subject)
+            issuer_cn = _common_name(cert.issuer)
+            certs_by_serial[serial] = VCenterCertificate(
+                serial_number=str(serial),
+                subject_cn=subject_cn,
+                issuer_cn=issuer_cn,
+                not_before=cert.not_valid_before_utc.isoformat(),
+                not_after=cert.not_valid_after_utc.isoformat(),
+                entry_names=[current_entry_name] if current_entry_name else [],
+            )
+
+    if not certs_by_serial:
+        warnings.append(
+            f"{_STS_CERTIFICATES_FILENAME} contained no decodable certificates; "
+            "SSO/STS certificate expiry unavailable"
+        )
+        return warnings
+
+    vcenter.sts_certificates_data_available = True
+    vcenter.sts_certificates = list(certs_by_serial.values())
+    return warnings
+
+
+def _unfold_ldif_lines(lines: list[str]) -> list[str]:
+    unfolded: list[str] = []
+    for line in lines:
+        if line.startswith(" ") and unfolded:
+            unfolded[-1] += line[1:]
+        else:
+            unfolded.append(line)
+    return unfolded
+
+
+def _decode_certificate(b64: str, warnings: list[str]) -> x509.Certificate | None:
+    try:
+        der = base64.b64decode(b64, validate=True)
+        return x509.load_der_x509_certificate(der)
+    except (binascii.Error, ValueError) as exc:
+        warnings.append(f"Could not decode a userCertificate entry: {exc}")
+        return None
+
+
+def _common_name(name: x509.Name) -> str | None:
+    attrs = name.get_attributes_for_oid(NameOID.COMMON_NAME)
+    return str(attrs[0].value) if attrs else None

@@ -93,10 +93,16 @@ ESXi 6.x, but only 8.0.3 has actually been exercised.
   captures via `esxcli`/IPMI, not vendor-specific RAID CLI output, which
   `vm-support` does not run by default.
 - **vCenter support bundle (the `vc-` member).** The vCenter appliance's
-  own identity, version, `service-control` service status, and appliance
-  filesystem usage are parsed (`parsers/vcenter.py`), as is cluster
-  name/moref and vCLS-membership data recovered from `vpxd`'s current
-  operational log. What is *not*, and cannot be, parsed from any support
+  own identity, version, `service-control` service status, appliance
+  filesystem usage, and vsphere.local SSO/STS signing-certificate expiry
+  (`commands/sts-certificates.txt`, decoded via the `cryptography`
+  library) are parsed (`parsers/vcenter.py`), as is cluster name/moref
+  and vCLS-membership data recovered from `vpxd`'s current operational
+  log. The certificate check covers only what vmdir's own LDAP export
+  contains -- the VECS-managed Machine SSL certificate, solution-user
+  certificates, and every other VECS store are not captured in any
+  `vc-support` bundle (no `vecs-cli` dump is present), so they are not
+  assessed. What is *not*, and cannot be, parsed from any support
   bundle (host or vCenter) is anything that lives only in vCenter's own
   inventory database: the EVC baseline *name*, vCenter-side storage-policy
   compliance status, full VM inventory (including powered-off VMs) and

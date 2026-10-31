@@ -407,6 +407,42 @@ and the "Known limitations" section of [README.md](README.md)).
   assessment's finding count is unchanged (65) -- zero regressions.
   Every firing path is covered by a synthetic unit test only, stated
   explicitly in RULE_CATALOG.md.
+- `vcenter.sts_certificate_expiring` rule: decodes the vsphere.local SSO
+  domain's signing certificates and issuing CA from
+  `commands/sts-certificates.txt` (vmdir's LDAP export) and flags one
+  expiring within 90 days (Medium), 30 days (High), or already expired
+  (Critical) -- measured from the bundle's own capture date, never
+  wall-clock "now". Adds a new runtime dependency, `cryptography`
+  (`>=42,<46`), to decode the base64-encoded DER X.509 certificates; no
+  other dependency was previously needed for anything crypto-related.
+  Certificates are deduplicated by serial number, since the same
+  certificate commonly appears under both its `TenantCredential-N`
+  (signing) and `TrustedCertChain-N` (trust) LDAP entries. Covers only
+  the vsphere.local SSO signing certificates stored in vmdir -- **not**
+  the VECS-managed Machine SSL certificate, solution-user certificates,
+  or any other VECS store, since no `vc-support` bundle captures a
+  `vecs-cli` dump; stated explicitly in the report's own Scope section
+  and in this rule's limitations. The existing "vCenter Server" report
+  row now also shows the nearest certificate's expiry date even when
+  nothing fires. Validated against the real vCenter Server appliance
+  bundle (vc-support, 8.0.3) paired with the EAMSC2 ESXi bundle:
+  `sts-certificates.txt` decodes to 4 unique certificates (2 signing
+  certs plus their issuing CA), each expiring in 2033/2034 -- 7-8 years
+  past this bundle's 2026 capture date, so the non-firing path is
+  real-data-confirmed. The firing (expiring/expired) path is covered by
+  a synthetic unit test only, using a real self-signed certificate
+  generated at test time via `cryptography` -- the same decode path as
+  production, not a stub.
+- Documented the three pre-existing vCenter appliance rules
+  (`vcenter.core_service_stopped`, `vcenter.optional_service_stopped`,
+  `vcenter.appliance_disk_usage`) in RULE_CATALOG.md -- they were
+  already implemented and live, with a "vCenter" category already
+  wired into `summary.py`, but had never been added to the rule table,
+  missing a step of CONTRIBUTING.md's own "adding a rule" checklist.
+  Confirmed in the process that both already fire for real,
+  previously-unreported conditions on the EAMSC2 vCenter appliance:
+  `/storage/archive` at 95% used (88.1 GiB of 97.9 GiB), and 6 non-core
+  services correctly classified as informational.
 
 ### Fixed
 

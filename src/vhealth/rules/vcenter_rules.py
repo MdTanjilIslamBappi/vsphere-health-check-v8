@@ -7,8 +7,10 @@ record -- not per host -- so they live outside the per-host ``Rule``/
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 
 from vhealth.models.findings import Finding, Severity
 from vhealth.models.vcenter import VCenterInfo
@@ -33,6 +35,15 @@ _CORE_VCENTER_SERVICES = {
 
 _DISK_USAGE_MEDIUM_PERCENT = 90
 _DISK_USAGE_HIGH_PERCENT = 95
+
+# Certificate-expiry urgency windows, counted from the bundle's own
+# capture date (never wall-clock "now" -- this is an offline, point-in-
+# time assessment, so "today" must mean the day the bundle was captured).
+# These day counts are vhealth's own choice, not VMware-documented.
+_CERT_HIGH_URGENCY_DAYS = 30
+_CERT_MEDIUM_URGENCY_DAYS = 90
+
+_CAPTURED_ON_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})")
 
 
 @dataclass(frozen=True)
@@ -177,6 +188,93 @@ def _disk_usage_findings(vcenter: VCenterInfo) -> list[Finding]:
     return findings
 
 
+def _certificate_expiring_findings(vcenter: VCenterInfo) -> list[Finding]:
+    captured_date = _parse_captured_date(vcenter.captured_on)
+    if captured_date is None:
+        return []
+
+    findings: list[Finding] = []
+    for cert in vcenter.sts_certificates:
+        not_after = _parse_iso_datetime(cert.not_after)
+        if not_after is None:
+            continue
+        days_until = (not_after.date() - captured_date).days
+
+        if days_until <= 0:
+            severity = Severity.CRITICAL
+            urgency = f"expired {-days_until} day(s) before this bundle was captured"
+        elif days_until <= _CERT_HIGH_URGENCY_DAYS:
+            severity = Severity.HIGH
+            urgency = f"expires in {days_until} day(s)"
+        elif days_until <= _CERT_MEDIUM_URGENCY_DAYS:
+            severity = Severity.MEDIUM
+            urgency = f"expires in {days_until} day(s)"
+        else:
+            continue
+
+        subject = cert.subject_cn or f"serial {cert.serial_number}"
+        findings.append(
+            Finding(
+                rule_id="vcenter.sts_certificate_expiring",
+                title="SSO/STS certificate is expiring soon or has expired",
+                severity=severity,
+                summary=(
+                    f"{vcenter.hostname}: SSO/STS certificate '{subject}' (issuer "
+                    f"'{cert.issuer_cn or 'unknown'}') {urgency} (not_after={cert.not_after}), "
+                    f"relative to this bundle's own capture date."
+                ),
+                evidence=[
+                    _evidence_line(
+                        vcenter,
+                        f"sts-certificates.txt: {subject} (serial {cert.serial_number}, "
+                        f"entries: {', '.join(cert.entry_names) or 'unknown'}) "
+                        f"not_after={cert.not_after}",
+                    )
+                ],
+                affected_host=vcenter.hostname,
+                affected_object=subject,
+                remediation=(
+                    "Renew the SSO/STS signing certificate via "
+                    "'/usr/lib/vmware-vmafd/bin/certool' or the vSphere Client's "
+                    "Certificate Management workflow before it expires -- an expired "
+                    "STS signing certificate breaks SSO login for the whole environment."
+                ),
+                limitations=(
+                    "Covers only the vsphere.local SSO signing certificates stored in "
+                    "vmdir (sts-certificates.txt); the VECS-managed Machine SSL "
+                    "certificate, solution-user certificates, and other VECS stores are "
+                    "not captured in a vc-support bundle and are not assessed here. "
+                    "Urgency windows "
+                    f"({_CERT_HIGH_URGENCY_DAYS}/{_CERT_MEDIUM_URGENCY_DAYS} days) are "
+                    "vhealth's own choice, not VMware-documented. Measured from this "
+                    "bundle's own capture date, not the date this report is generated."
+                ),
+            )
+        )
+    return findings
+
+
+def _parse_captured_date(captured_on: str | None):
+    if not captured_on:
+        return None
+    match = _CAPTURED_ON_DATE_RE.match(captured_on)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(1), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
 def _human(size: int | None) -> str:
     if size is None:
         return "unknown"
@@ -216,6 +314,19 @@ ALL_VCENTER_RULES: list[VCenterRule] = [
             "Single capture-time reading; thresholds 90%=medium, 95%=high."
         ),
         evaluate=_disk_usage_findings,
+    ),
+    VCenterRule(
+        rule_id="vcenter.sts_certificate_expiring",
+        title="SSO/STS certificate is expiring soon or has expired",
+        default_severity=Severity.MEDIUM,
+        evidence_required=("sts_certificates[].not_after",),
+        limitations=(
+            f"Covers only vsphere.local SSO signing certificates (sts-certificates.txt), "
+            "not VECS-managed certificates; thresholds "
+            f"{_CERT_HIGH_URGENCY_DAYS}/{_CERT_MEDIUM_URGENCY_DAYS} days are vhealth's own "
+            "choice; measured from the bundle's own capture date."
+        ),
+        evaluate=_certificate_expiring_findings,
     ),
 ]
 

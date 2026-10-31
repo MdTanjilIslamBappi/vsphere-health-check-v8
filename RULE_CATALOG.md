@@ -59,6 +59,7 @@ add a new one.
 | `vcenter.core_service_stopped` (**vCenter rule** -- runs once per assessment against the vCenter appliance bundle, not per ESXi host) | vCenter | Core vCenter Server service is stopped | High | `services_stopped` (from `service-control --status --all`), checked against a fixed list of core services (`vpxd`, `vmware-vpostgres`, `vmdird`, `vmcad`, `lookupsvc`, ...) | Capture-time snapshot only; a stopped service can be expected during a scheduled maintenance window, so confirm against change records. |
 | `vcenter.optional_service_stopped` (**vCenter rule**) | vCenter | Non-core vCenter service(s) reported stopped | Info | `services_stopped`, for any service not on the core list above | Snapshot at capture time only; stopped optional/feature-dependent services (vCHA, Auto Deploy, Image Builder, ...) are often intentional, so this is informational, not a warning. **Fired against real data**: see below. |
 | `vcenter.appliance_disk_usage` (**vCenter rule**) | vCenter | vCenter appliance filesystem usage is high | Medium (90%+) / High (95%+) | `appliance_disks[].percent_used` (from `df.txt`, `/storage/*` and `/` mounts only) | Single capture-time reading; cannot distinguish a slow trend from a transient spike. Thresholds (90%=medium, 95%=high) are vhealth's own choice, not VMware-documented. **Fired against real data on first try**: see below. |
+| `vcenter.sts_certificate_expiring` (**vCenter rule**) | vCenter | SSO/STS certificate is expiring soon or has expired | Medium (90 days) / High (30 days) / Critical (expired) | `sts_certificates[].not_after` (decoded X.509 from `sts-certificates.txt`, vmdir's LDAP export of the vsphere.local SSO domain) | Covers only the vsphere.local SSO signing certificates (and their issuing CA) stored in vmdir -- **not** the VECS-managed Machine SSL certificate, solution-user certificates, or any other VECS store, since no `vc-support` bundle captures a `vecs-cli` dump. Urgency windows (30/90 days) are vhealth's own choice, not VMware-documented. Measured from the bundle's own capture date, never wall-clock "now". Not yet observed firing against real-world data (see below). |
 
 ## Validation status
 
@@ -326,6 +327,19 @@ services correctly classified as informational rather than a warning.
 `vcenter.core_service_stopped`'s non-firing path is also
 real-data-confirmed: none of the fixed core-service list was reported
 stopped on this appliance.
+
+`vcenter.sts_certificate_expiring`'s non-firing path was confirmed
+against the same real vCenter appliance bundle: `sts-certificates.txt`
+decodes to 4 unique certificates (2 signing certs plus their issuing
+CA, deduplicated from 8 raw `userCertificate::` entries spread across
+`TenantCredential-1`/`TrustedCertChain-1` and
+`TenantCredential-2`/`TrustedCertChain-2`), each expiring in 2033 or
+2034 -- 7-8 years past this bundle's 2026 capture date, far outside
+every urgency window. The firing case (expiring/expired) has not yet
+been observed against real-world data and is covered by synthetic
+unit tests only, using a real (self-signed, RSA-2048) certificate
+generated at test time via the `cryptography` library -- the same
+decode path as production, not a stub.
 
 ## Adding a rule
 

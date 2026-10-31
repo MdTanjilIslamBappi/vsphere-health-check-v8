@@ -7,11 +7,18 @@ values (hostnames, device IDs, log lines) are made up.
 
 from __future__ import annotations
 
+import base64
 import gzip
 import json
 import tarfile
 import zipfile
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 
 _README = """Command line: vm-support.cgi /usr/lib/vmware/hostd/cgi-bin/vm-support.cgi
 Bundle name: None
@@ -822,11 +829,56 @@ _VCLS_MEMBERSHIP_LINE = (
 )
 
 
+_STS_CERTIFICATES_CAPTURE_DATE = datetime(2026, 1, 15, tzinfo=UTC)
+
+
+def _build_self_signed_cert_der(subject_cn: str, days_until_expiry: int) -> bytes:
+    """A real, minimal self-signed X.509 certificate (DER-encoded).
+
+    ``days_until_expiry`` is relative to the VCSA fixture's own capture
+    date (2026-01-15), matching the project's convention of anchoring
+    expiry/window logic to the bundle's capture date, never wall-clock
+    "now".
+    """
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, subject_cn)])
+    not_before = _STS_CERTIFICATES_CAPTURE_DATE - timedelta(days=365)
+    not_after = _STS_CERTIFICATES_CAPTURE_DATE + timedelta(days=days_until_expiry)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(not_before)
+        .not_valid_after(not_after)
+        .sign(key, hashes.SHA256())
+    )
+    return cert.public_bytes(encoding=serialization.Encoding.DER)
+
+
+def _ldif_fold(line: str, width: int = 76) -> str:
+    """Fold a long LDIF attribute line at ``width`` chars, RFC 2849-style
+
+    (each continuation line starts with exactly one space).
+    """
+    if len(line) <= width:
+        return line
+    folded = [line[:width]]
+    rest = line[width:]
+    while rest:
+        folded.append(" " + rest[: width - 1])
+        rest = rest[width - 1 :]
+    return "\n".join(folded)
+
+
 def build_vcsa_dir(
     root: Path,
     cluster_name: str = "EAMSC2",
     cluster_moref: str = "domain-c1001",
     vcls_membership: bool = True,
+    sts_certificate_days_until_expiry: int | None = None,
+    sts_certificate_subject_cn: str = "ssoserverSign",
 ) -> Path:
     """Create a synthetic vc-support appliance bundle directory under ``root``.
 
@@ -834,6 +886,14 @@ def build_vcsa_dir(
     skips paths longer than Windows' safe-MAX_PATH (240 chars), so long
     fixture names would silently produce an empty bundle under the
     pytest tmp_path prefix.
+
+    ``sts_certificate_days_until_expiry``, if given, writes a single
+    real (self-signed, RSA-2048) X.509 certificate into
+    ``sts-certificates.txt`` as one ``TenantCredential-1`` LDIF entry,
+    expiring that many days after this fixture's own capture date
+    (2026-01-15) -- negative means already expired. Left as ``None``,
+    no sts-certificates.txt is written at all (SSO/STS certificate
+    expiry not assessed).
     """
     dir_name = "vc-vcsa.example.test"
     bundle_dir = root / dir_name
@@ -854,6 +914,26 @@ def build_vcsa_dir(
     (bundle_dir / "var" / "log" / "vmware" / "vpxd" / "vpxd-2508.log").write_text(
         log_text, encoding="utf-8"
     )
+
+    if sts_certificate_days_until_expiry is not None:
+        der = _build_self_signed_cert_der(
+            sts_certificate_subject_cn, sts_certificate_days_until_expiry
+        )
+        b64 = base64.b64encode(der).decode("ascii")
+        cert_block = f"{_ldif_fold('userCertificate:: ' + b64)}\n"
+        # Realistic duplication: the same signing certificate commonly
+        # appears under both its TenantCredential-N (signing) and
+        # TrustedCertChain-N (trust) entries -- exercises dedup-by-serial.
+        ldif = (
+            "dn: cn=TenantCredential-1,cn=vsphere.local,cn=Tenants,cn=IdentityManager,"
+            "cn=Services,dc=vsphere,dc=local\n"
+            f"{cert_block}"
+            "dn: cn=TrustedCertChain-1,cn=TrustedCertificateChains,cn=vsphere.local,"
+            "cn=Tenants,cn=IdentityManager,cn=Services,dc=vsphere,dc=local\n"
+            f"{cert_block}"
+        )
+        (bundle_dir / "commands" / "sts-certificates.txt").write_text(ldif, encoding="utf-8")
+
     return bundle_dir
 
 

@@ -4,8 +4,9 @@ from synthetic_bundle import build_host_dir, build_vcsa_dir
 
 from vhealth.discovery import bundle as discovery
 from vhealth.models.assessment import Assessment, AssessmentMetadata
+from vhealth.models.findings import Finding, Severity
 from vhealth.models.host import HostInfo
-from vhealth.models.vcenter import VCenterInfo
+from vhealth.models.vcenter import VCenterCertificate, VCenterInfo
 from vhealth.parsers import vcenter as vcenter_parser
 from vhealth.reporting import summary
 from vhealth.rules.vcenter_rules import evaluate_all_vcenter
@@ -67,7 +68,9 @@ def test_parse_vcsa_bundle_identity_and_services(tmp_path):
     assert info.vc_build == "12345678"
     assert "vmware-vpxd" in info.services_running
     assert set(info.services_stopped) == {"vmcam", "vmonapi", "vmware-imagebuilder", "vmware-vcha"}
-    assert info.parse_warnings == []
+    assert info.parse_warnings == [
+        "sts-certificates.txt not found; SSO/STS certificate expiry unavailable"
+    ]
 
 
 def test_parse_vcsa_bundle_disks_ignore_transients(tmp_path):
@@ -135,6 +138,61 @@ def test_appliance_disk_thresholds(tmp_path):
     assert "/" not in findings and "/dev" not in findings
 
 
+def test_sts_certificates_parsed_and_deduplicated_by_serial(tmp_path):
+    info = _parse_vcsa(tmp_path, sts_certificate_days_until_expiry=365)
+    assert info.sts_certificates_data_available is True
+    # Same cert appears under TenantCredential-1 and TrustedCertChain-1 in
+    # the fixture -- dedup by serial number must collapse it to one entry.
+    assert len(info.sts_certificates) == 1
+    cert = info.sts_certificates[0]
+    assert cert.subject_cn == "ssoserverSign"
+    assert sorted(cert.entry_names) == ["TenantCredential-1", "TrustedCertChain-1"]
+    assert cert.not_after is not None
+
+
+def test_sts_certificates_missing_file_is_warned_not_crashed(tmp_path):
+    info = _parse_vcsa(tmp_path)
+    assert info.sts_certificates_data_available is False
+    assert info.sts_certificates == []
+    assert any("sts-certificates.txt" in w for w in info.parse_warnings)
+
+
+def test_certificate_expired_is_critical(tmp_path):
+    info = _parse_vcsa(tmp_path, sts_certificate_days_until_expiry=-5)
+    findings = [
+        f for f in evaluate_all_vcenter(info) if f.rule_id == "vcenter.sts_certificate_expiring"
+    ]
+    assert len(findings) == 1
+    assert findings[0].severity.value == "critical"
+    assert "expired" in findings[0].summary
+
+
+def test_certificate_expiring_within_30_days_is_high(tmp_path):
+    info = _parse_vcsa(tmp_path, sts_certificate_days_until_expiry=10)
+    findings = [
+        f for f in evaluate_all_vcenter(info) if f.rule_id == "vcenter.sts_certificate_expiring"
+    ]
+    assert len(findings) == 1
+    assert findings[0].severity.value == "high"
+
+
+def test_certificate_expiring_within_90_days_is_medium(tmp_path):
+    info = _parse_vcsa(tmp_path, sts_certificate_days_until_expiry=60)
+    findings = [
+        f for f in evaluate_all_vcenter(info) if f.rule_id == "vcenter.sts_certificate_expiring"
+    ]
+    assert len(findings) == 1
+    assert findings[0].severity.value == "medium"
+
+
+def test_certificate_far_from_expiry_raises_no_finding(tmp_path):
+    info = _parse_vcsa(tmp_path, sts_certificate_days_until_expiry=365 * 8)
+    findings = [
+        f for f in evaluate_all_vcenter(info) if f.rule_id == "vcenter.sts_certificate_expiring"
+    ]
+    assert findings == []
+
+
 # --- summary integration ------------------------------------------------------
 
 
@@ -182,3 +240,45 @@ def test_vcenter_server_row_reports_version_and_service_counts():
     assert row.status == "Healthy"
     assert "version 8.0.3.00900" in row.remarks
     assert "3 service(s) running, 1 stopped" in row.remarks
+
+
+def test_vcenter_server_row_reports_nearest_certificate_expiry():
+    vcenter = VCenterInfo(
+        hostname="vcsa01.example.test",
+        bundle_source="vc-1",
+        captured_on="2026-01-15 11:00:00.000000",
+        sts_certificates_data_available=True,
+        sts_certificates=[
+            VCenterCertificate(
+                serial_number="1",
+                subject_cn="ssoserverSign",
+                not_after="2026-01-25T00:00:00+00:00",
+            ),
+            VCenterCertificate(
+                serial_number="2",
+                subject_cn="CA",
+                not_after="2034-01-01T00:00:00+00:00",
+            ),
+        ],
+    )
+    assessment = _assessment(vcenter)
+    rows = {r.component: r for r in summary.component_status_rows(assessment)}
+    row = rows["vCenter Server"]
+    assert "nearest SSO/STS certificate expiry: ssoserverSign on 2026-01-25" in row.remarks
+    assert summary.category_for_rule_id("vcenter.sts_certificate_expiring") == "vCenter"
+
+
+def test_vcenter_server_row_status_reflects_expiring_certificate_finding():
+    vcenter = VCenterInfo(hostname="vcsa01.example.test", bundle_source="vc-1")
+    finding = Finding(
+        rule_id="vcenter.sts_certificate_expiring",
+        title="SSO/STS certificate is expiring soon or has expired",
+        severity=Severity.HIGH,
+        summary="...",
+        affected_host="vcsa01.example.test",
+    )
+    assessment = Assessment(
+        metadata=_metadata(), hosts=[], findings=[finding], vcenter=vcenter
+    )
+    rows = {r.component: r for r in summary.component_status_rows(assessment)}
+    assert rows["vCenter Server"].status == "Attention Needed"
